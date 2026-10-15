@@ -8,7 +8,8 @@ Every merge runs done-done and posts one evidence card to a sign-off board, with
 
 `merge-card/merge-card` is one bash script with two subcommands:
 
-- `merge-card gate <task-id> <worktree|-> <head|-> <pr-url|->` runs `done-done check --from <source> --judge --json` in the task's worktree, where `<source>` is the pull request when there is one and `$FM_HOME/data/<task-id>/checks.md` otherwise.
+- `merge-card gate <task-id> <worktree|-> <head|-> <pr-url|->` runs `done-done check --from <source> --citation-base $FM_HOME/data/<task-id> --judge --json` in the task's worktree, where `<source>` is the pull request when there is one and `$FM_HOME/data/<task-id>/checks.md` otherwise.
+  The Checks evidence lives in `$FM_HOME/data/<task-id>`, so `--citation-base` resolves the block's relative evidence paths there while absolute paths stay unchanged; the work copy only supplies the repo identity.
   It prints the verdict and saves it for the card in `$FM_HOME/data/<task-id>/merge-card.json`.
   It is report only: it always exits 0, so it never refuses a merge the checks lint passes.
   Hand-captured evidence legitimately comes back inconclusive and the merge still lands.
@@ -18,7 +19,7 @@ Every merge runs done-done and posts one evidence card to a sign-off board, with
   The card key is the merge's own (`merge-<owner>-<repo>-pull-<n>`, or `merge-<head>` for a local merge), so a repeat post or a second home adds nothing.
   sign-off-axi writes the board under its lock and only appends.
 
-Both subcommands need `done-done`, `sign-off-axi`, `jq` and `gh` on `PATH`, plus `FM_HOME` set.
+Both subcommands need `done-done >= 0.3.1` (`--citation-base`), `sign-off-axi`, `jq` and `gh` on `PATH`, plus `FM_HOME` set.
 
 Install into one home, so the post-merge hook calls `post` once for each recorded merge:
 
@@ -59,3 +60,59 @@ printf 'setsid -f <addons>/quota-failover/quota-failover %s >/dev/null 2>&1 </de
 ```
 
 Remove it with `$FM_HOME/bin/fm-check-unregister.sh quota-failover-watch`.
+
+## ask-default
+
+An unanswered ask gets a safe, pre-declared default instead of blocking the home, and work continues.
+
+`ask-default/ask-default` is one bash script with four subcommands:
+
+- `ask-default open <ask-id> --wait-until <YYYY-MM-DDTHH:MM:SSZ> | --wait <seconds> --default-cmd <command> --safety <class> --reason <one line>` records one ask in `$FM_HOME/data/ask-default/asks/<ask-id>`: its wait clock, the pre-declared default action, that action's safety class, and the reason.
+  A class of `safe` means the default action is reversible and touches no destructive, irreversible, money, credential, or merge action, and it must name the command that performs it; any other class (`destructive`, `irreversible`, `money`, `credential`, `merge`) or `none` declares that no safe default exists and the ask must stay held.
+  Re-opening refreshes the wait clock; a defaulted ask is settled and never re-opens under the same id.
+- `ask-default decide <ask-id> [--probe-cmd <command>] [--timeout <seconds>]` probes the captain once under a hard timeout and decides what the home does about the ask.
+  The probe command exits 0 for reachable; anything else, including the timeout, resolves to unreachable inside the bound, so a hanging endpoint never wedges the caller.
+  Its command comes from `--probe-cmd` or `$ASK_DEFAULT_PROBE` and its timeout from `--timeout`, `$ASK_DEFAULT_TIMEOUT`, or 5 seconds; with no probe configured it refuses rather than assume the captain is unreachable.
+  Exit codes: `0` defaulted (or already-defaulted), so the caller may continue unrelated work, `10` held (the clock expired but no safe default exists), `11` waiting (the clock has not expired), `12` reachable (the ask stays open for the real answer), `1` error on stderr.
+  A defaulted ask runs its default action exactly once, under a per-ask lock, and appends `{ask, applied_at, default_cmd, reason, rc}` to the append-only `$FM_HOME/data/ask-default/applied.log`.
+- `ask-default probe <command> [--timeout <seconds>]` runs one bounded reachability probe on its own: exit 0 reachable, 1 unreachable.
+- `ask-default show <ask-id>` prints the ask record.
+
+`ask-default` needs `bash`, `jq`, `flock`, and GNU coreutils (`timeout`, `date -d`) on `PATH`, plus `FM_HOME` set.
+
+The add-on decides; it does not wire itself in. A home discovers open asks and calls `decide` per ask from its own supervision loop, which is a thin hook in the firstmate fork, not in this repo.
+
+## tailscale-resilience
+
+One host watchdog for the two failures that quietly take a lane offline: the Tailscale network going unreachable while `tailscaled` still runs, and a display/session dying while logind still lists it.
+
+`tailscale-resilience/tailscale-resilience` is one bash script with one subcommand:
+
+- `tailscale-resilience check [--samples N] [--window S] [--cooldown S] [--state-dir DIR]` reads both detectors from the real CLI, advances their bounded sample windows in the state dir, and on the first window that holds a failure for the whole window it heals, alerts and records.
+  - `net` uses `tailscale status --json` (BackendState, peer Online flags) and `tailscale netcheck --format json` (RegionLatency): the network is unreachable when the daemon answers but nothing else does - the status call fails, `BackendState` is not `Running`, or no DERP relay and no peer is reachable.
+  - `display` uses `loginctl list-sessions` and `show-session`: a session logind still lists is dead when it is closing, its leader PID is gone from `/proc`, or a graphical session has no display socket left for its user.
+  - A window needs `--samples` (3) consecutive failing samples inside `--window` (600) seconds, so one transient failure never heals and never alerts.
+  - The heal is one `tailscale up` per detected outage and never twice inside `--cooldown` (300) seconds.
+  - It reattaches the connection and changes nothing else, so a dead `tailscaled` or a `NeedsLogin` node is recorded with the real cause instead of being papered over.
+  - Alerting never uses Tailscale: `$STATE_DIR/alerts.log` always works, and `TSR_ALERT_CMD` adds a local channel - a LAN webhook, `notify-send`, an SMS gateway - run with the alert text on stdin and as `$1`.
+  - Every detection, heal and alert is appended to `$STATE_DIR/events.jsonl`, one JSON line each, naming what was detected, when, and the heal result.
+
+It needs `bash`, `jq`, `tailscale` and `loginctl` on `PATH`, and one instance owns the state dir.
+
+Install it as a timer so the windows are fed at the fleet's scan cadence (60s matches a Firstmate scan):
+
+```sh
+printf '%s\n' '[Unit]' 'Description=Tailscale and display resilience check' \
+  '[Service]' 'Type=oneshot' 'ExecStart=<addons>/tailscale-resilience/tailscale-resilience check' \
+  'Environment=TSR_ALERT_CMD=<a local push channel, never a tailnet address>' \
+  'EnvironmentFile=-/etc/default/tailscale-resilience' > /etc/systemd/system/tailscale-resilience.service
+printf '%s\n' '[Unit]' 'Description=Run the resilience check' \
+  '[Timer]' 'OnCalendar=minutely' 'Persistent=true' \
+  '[Install]' 'WantedBy=timers.target' > /etc/systemd/system/tailscale-resilience.timer
+systemctl enable --now tailscale-resilience.timer
+```
+
+The state defaults to `${XDG_STATE_HOME:-$HOME/.local/state}/tailscale-resilience`, so a timer runs it as one user and that user owns the record.
+`TSR_SAMPLES`, `TSR_WINDOW`, `TSR_COOLDOWN` and `TSR_STATE_DIR` set the same knobs as the flags.
+
+The dead-display case is detected, recorded and alerted but not healed; a heal for it is a later slice.
