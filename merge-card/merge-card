@@ -137,3 +137,7 @@ case ${1:-} in
   post) shift; post "$@" ;;
   *) die "usage: merge-card gate|post ... (see the header of $0)" ;;
 esac
+
+# ci-proof: deliberate shellcheck break (info-tier SC2086, unquoted expansion)
+ci_probe="a b"
+cat $ci_probe > /dev/null
