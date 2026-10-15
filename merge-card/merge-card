@@ -4,7 +4,8 @@
 #   merge-card gate <task-id> <worktree|-> <head|-> <pr-url|->
 #     Install as $FM_HOME/config/merge-gate. In the task's worktree it runs
 #     `done-done check --from <pr-url>` (or $FM_HOME/data/<task-id>/checks.md with no PR),
-#     with done-done's judge, prints the verdict and saves it for the card in $FM_HOME/data/<task-id>/merge-card.json.
+#     with done-done's judge and its evidence cited from $FM_HOME/data/<task-id> (--citation-base),
+#     prints the verdict and saves it for the card in $FM_HOME/data/<task-id>/merge-card.json.
 #     Report only: it always exits 0, so it never refuses a merge.
 #   merge-card post --board <board.json> <task-id> <worktree|-> <head|-> <pr-url|->
 #     Install as $FM_HOME/config/post-merge. Posts one card per merge: the Checks outcome as the
@@ -26,7 +27,9 @@ check() {
   if [ "$wt" = - ] || [ ! -d "$wt" ]; then
     verdict="not checked: its work copy was already cleaned up"
   else
-    out=$(cd "$wt" && done-done check --from "$src" --judge --json 2>&1) || rc=$?
+    # The Checks evidence lives in the task folder, so resolve relative citations there
+    # (--citation-base leaves absolute paths unchanged); the work copy is only the repo identity.
+    out=$(cd "$wt" && done-done check --from "$src" --citation-base "$FM_HOME/data/$id" --judge --json 2>&1) || rc=$?
     case $rc in
       0) verdict=pass ;;
       1) verdict=fail ;;
