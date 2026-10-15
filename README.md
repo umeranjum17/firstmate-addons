@@ -19,7 +19,7 @@ Every merge runs done-done and posts one evidence card to a sign-off board, with
   The card key is the merge's own (`merge-<owner>-<repo>-pull-<n>`, or `merge-<head>` for a local merge), so a repeat post or a second home adds nothing.
   sign-off-axi writes the board under its lock and only appends.
 
-Both subcommands need `done-done`, `sign-off-axi`, `jq` and `gh` on `PATH`, plus `FM_HOME` set.
+Both subcommands need `done-done >= 0.3.1` (`--citation-base`), `sign-off-axi`, `jq` and `gh` on `PATH`, plus `FM_HOME` set.
 
 Install into one home, so the post-merge hook calls `post` once for each recorded merge:
 

@@ -14,7 +14,7 @@
 #     at the merged head through `done-done signoff`. The card key is the merge's own, so a repeat
 #     post, or another home posting the same merge, finds it on the board and adds nothing.
 #     sign-off-axi writes the board under its lock: it appends and never rewrites other cards.
-# Needs done-done, sign-off-axi, jq and gh on PATH.
+# Needs done-done >= 0.3.1 (--citation-base), sign-off-axi, jq and gh on PATH.
 set -u
 
 die() { echo "merge-card: $*" >&2; exit 1; }
@@ -102,7 +102,7 @@ post() {
     media=$(jq -r '.media[]?' "$f" | sed "s|^|${f%/*}/|")
   else
     run=null
-    media=$(jq -r '.check.evidence[]?' "$record" | grep -iE '\.(png|jpe?g|webp|mp4|webm)$')
+    media=$(jq -r --arg base "$FM_HOME/data/$id" '.check.evidence[]? | select(test("\\.(png|jpe?g|webp|mp4|webm)$"; "i")) | if startswith("/") then . else "\($base)/\(.)" end' "$record")
   fi
   while IFS= read -r f; do
     [ -f "$f" ] && [ "$n" -lt 12 ] || continue
