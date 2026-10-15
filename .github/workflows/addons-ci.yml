@@ -22,19 +22,26 @@ jobs:
       - uses: actions/checkout@v4
       # An add-on script is a shell script one level under a top-level add-on
       # directory (`merge-card/merge-card`, `ask-default/ask-default`), so a new
-      # add-on needs no edit here and a non-script file is left alone. The
-      # runner image ships shellcheck, so nothing is downloaded at run time.
+      # add-on needs no edit here and a non-script file is left alone.
+      # The runner image ships shellcheck, so nothing is downloaded at run time.
       - name: ShellCheck add-on scripts
         run: |
           set -euo pipefail
           shellcheck --version
+          # SC2015 is excluded because both add-ons use the deliberate
+          # `A && B || fallback` idiom where the fallback is the intent:
+          # ask-default's incomplete-record check and merge-card's usage guard
+          # and media cap. The advisory also disagrees between the runner
+          # image's ShellCheck 0.9.0 and the fleet's 0.11.0, so leaving it on
+          # would make the gate follow the image instead of the code.
+          # Every other check stays on at every severity.
           found=0
           for f in ./*/*; do
             [ -f "$f" ] || continue
             head -n 1 "$f" | grep -Eq '^#!.*\b(bash|sh)\b' || continue
             found=$((found + 1))
-            echo "== shellcheck -x $f =="
-            shellcheck -x "$f"
+            echo "== shellcheck -x -e SC2015 $f =="
+            shellcheck -x -e SC2015 "$f"
           done
           if [ "$found" -eq 0 ]; then
             echo "no add-on script found in any <add-on>/ directory" >&2
