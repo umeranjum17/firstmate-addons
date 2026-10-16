@@ -31,13 +31,18 @@ blocked=('rm -rf "$HOME"' 'rm -rf ~' 'rm -rf ~/' 'rm -fr $HOME/*' 'rm -r -f /hom
   'bash -c "rm -rf ~"' '\rm -rf ~' 'rm -rf /home/umer/..' 'rm -rf ../..' 'rm -rf ~/.fm-guard-probe-nonexistent'
   'rm -rf -- "$d"' 'd=$(mktemp -d); d=$HOME; rm -rf "$d"' 'd=$(mktemp -d); rm -rf "$d/.."' 'd=$(mktemp -d); rm -rf "$d"/../x'
   'd=$(mktemp -d); rm -rf ${d:-/}' 'HOME=$(mktemp -d); rm -rf "$HOME"' 'd=$(mktemp -d) node t.js; rm -rf "$d"'
-  'd=$(mktemp -d -p ~); rm -rf "$d"' 'd=$(mktemp -d); read d; rm -rf "$d"' 'TMPDIR=$(mktemp -d); rm -rf "$TMPDIR"' '(d=$(mktemp -d)); rm -rf "$d"' $'cat > f <<EOF\nhi\nEOF\nrm -rf ~'
-  $'bash <<EOF\nrm -rf ~\nEOF' $'cat <<\'EOF\' | sh\nrm -rf "$HOME"\nEOF' $'zsh <<-EOF\n\trm -rf /\n\tEOF')
+  'd=$(mktemp -d); read d; rm -rf "$d"' 'TMPDIR=$(mktemp -d); rm -rf "$TMPDIR"' '(d=$(mktemp -d)); rm -rf "$d"' $'cat > f <<EOF\nhi\nEOF\nrm -rf ~'
+  $'bash <<EOF\nrm -rf ~\nEOF' $'cat <<\'EOF\' | sh\nrm -rf "$HOME"\nEOF' $'zsh <<-EOF\n\trm -rf /\n\tEOF'
+  'S=~; rm -rf "$S"' 'S=/home/umer; rm -rf "$S"' 'S=$HOME/x; rm -rf "$S"' 'S=~/.cache/x; S=~; rm -rf "$S"'
+  '[ -n x ] && S=~/.cache/x && rm -rf "$S"' 'rm -rf "$S"' 'S=~/.cache/x; rm -rf "$S/.."' 'd=$(mktemp -d); d=~; rm -rf "$d"'
+  '(S=~/.cache/x); rm -rf "$S"' $'if [ -n x ]; then\nS=~/.cache/x\nrm -rf "$S"\nfi')
 allowed=('rm -rf ./build' 'rm -rf node_modules' 'd=$(mktemp -d); rm -rf -- "$d/x"' 'rm -rf ~/.cache/foo/bar' 'rm -f ~/.bashrc.bak'
   'rm -rf /tmp/abc' 'rm -rf $HOME/.cache/pockit' 'echo rm -rf is bad' 'git rm -r --cached x/y' 'rm -rf /home/umer/.treehouse/x/y'
   'HOME=$(mktemp -d) npm test' 'd=$(mktemp -d); cd "$d" && make; rm -rf -- "$d"' 'T="$(mktemp -d)" || exit 1; rm -rf "${T}"' 'f=$(mktemp); rm -rf "$f"'
   $'cat > f <<\'EOF\'\nnever rm -rf on /, ~ or a bare . target\nEOF' $'git commit -m "guard\n\nrm -rf ~ is blocked"' 'gh pr create --body "rm -rf ~/x was blocked; rm -rf . too"'
-  $'python3 - <<\'EOF\'\nprint("rm -rf ~")\nEOF')
+  $'python3 - <<\'EOF\'\nprint("rm -rf ~")\nEOF'
+  'SCRATCH=~/.cache/fm-scratch/lfm-doctor-real-checks/proof && rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"' 'S=~/.cache/x; rm -rf "$S"'
+  'd=$(mktemp -d /some/dir/maintest.XXXX); rm -rf "$d"' 'd=$(mktemp -p ~/.cache -d); rm -rf "$d"' 'd=$(mktemp -d -p ~); rm -rf "$d"')
 n=0
 for c in "${blocked[@]}"; do n=$((n + 1)); if hookrun "/tmp/case-$n" "$c"; then no "MISSED: $c"; fi; done
 for c in "${allowed[@]}"; do n=$((n + 1)); hookrun "/tmp/case-$n" "$c" || no "FALSE BLOCK: $c"; done
@@ -54,6 +59,8 @@ grep -q 'delete-guard' "$T/fm/state/.wake-queue" 2>/dev/null && no "first block 
 FM_TASK_ID=t1 FM_TASK_INBOX="$T/lead/state/t1.inbox" hookrun /w 'rm -rf "$HOME"' || true
 grep -q "delete guard REPEAT: task t1 tried 2 .*home $T/lead," "$T/fm/state/.wake-queue" && ok "repeat queues an immediate wake" || no "no repeat wake"
 tail -n1 "$T/fm/state/delete-guard.log" | jq -e --arg h "$T/lead" '.task == "t1" and .home == $h and .cwd == "/w" and .runtime == "claude"' >/dev/null && ok "log line names home, task, cwd, runtime" || no "log line fields"
+FM_TASK_ID=t2 FM_TASK_INBOX="$T/lead/state/t2.inbox" hookrun "$T/fm/state" 'rm -rf ~' || true # cwd's firstmate home wins over an inherited inbox home
+jq -e --arg h "$T/fm" '.task == "t2" and .home == $h' <(tail -n1 "$T/fm/state/delete-guard.log") >/dev/null && ok "home is the firstmate home of cwd, not an inherited inbox" || no "cwd home lost to inbox"
 FM_HOME=/elsewhere hookrun "$T/fm/state" 'rm -rf ~' || true # a lead with an inherited FM_HOME, working in its own home
 tail -n1 "$T/fm/state/delete-guard.log" | jq -e --arg h "$T/fm" '.home == $h and .task == ""' >/dev/null && ok "no-task block logs the home holding cwd" || no "home from cwd"
 [ "$fail" -eq 0 ] && echo PASS || { echo FAIL; exit 1; }
