@@ -53,7 +53,17 @@ if [ -f "$STUB_DIR/lint-fail" ]; then
 fi
 echo "checks-lint: PASS: 2 evidence files"
 EOF
-chmod +x "$FM/bin/fm-crew-state.sh" "$FM/bin/fm-pr-merge.sh" "$STUB_DIR/fm-checks-lint.sh"
+cat > "$STUB_DIR/gh" <<'EOF'
+#!/usr/bin/env bash
+# stub: `gh pr view <url> --json body -q .body` prints $STUB_DIR/body/<number>, else a proven Checks block
+printf '%s\n' "$*" >> "$STUB_DIR/gh-calls"
+if [ -f "$STUB_DIR/gh-fail" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+n=${3##*/}
+if [ -f "$STUB_DIR/body/$n" ]; then cat "$STUB_DIR/body/$n"; else printf 'Summary\r\n\r\n## Checks\r\nevidence: /x/proof.txt\r\n'; fi
+EOF
+chmod +x "$FM/bin/fm-crew-state.sh" "$FM/bin/fm-pr-merge.sh" "$STUB_DIR/fm-checks-lint.sh" "$STUB_DIR/gh"
+export PATH=$STUB_DIR:$PATH
+mkdir -p "$STUB_DIR/body"; : > "$STUB_DIR/gh-calls"
 H1=1111111111111111111111111111111111111111 H2=2222222222222222222222222222222222222222
 
 # (a) yolo=off: skipped even though the state is green, nothing is linted or merged.
@@ -87,6 +97,7 @@ check "d: exactly one line" "$(printf '%s\n' "$out" | wc -l)" 1
 has "d: merged line with URL" "$out" "merged t3 https://github.com/ex/r/pull/3"
 check "d: merge called once with both args" "$(cat "$STUB_DIR/merge-calls")" "$FM|t3 https://github.com/ex/r/pull/3"
 check "d: attempted head remembered" "$(cat "$FM/data/fm-merge-on-green/t3.head")" "$H1"
+check "d: normal merged line in the task status" "$(sed -E 's/^done \[at=[0-9]+\]: /done [at=N]: /' "$FM/state/t3.status")" "done [at=N]: merged https://github.com/ex/r/pull/3"
 
 # (e) same head not retried after a merge, and not retried after a refusal either.
 check "e: silent after merged head" "$(mog)" ""
@@ -99,6 +110,7 @@ has "e: refusal reason named" "$out" "required check ci is red"
 check "e: refusal recorded the attempted head" "$(cat "$FM/data/fm-merge-on-green/t4.head")" "$H2"
 check "e: refused head silent on rerun" "$(mog)" ""
 check "e: no second merge attempt" "$(wc -l < "$STUB_DIR/merge-calls")" 2
+check "e: refused merge writes no status line" "$([ -e "$FM/state/t4.status" ] && echo written || echo none)" none
 
 # (f) not-ready resolved state and no pr_head: silent, no gate commands ran.
 rm "$STUB_DIR/merge-refuse"
@@ -185,6 +197,38 @@ check "k: next sweep retries and merges" "$(printf '%s\n' "$out" | wc -l)" 1
 has "k: merged after timeout" "$out" "merged t10 https://github.com/ex/r/pull/10"
 check "k: head recorded after merge" "$(cat "$FM/data/fm-merge-on-green/t10.head")" "$H1"
 rm "$FM/state/t10.meta" "$FM/state/t10.run-receipt.json"
+
+# (l) merge=manual: skipped silently even though every gate would pass; nothing read, linted or merged.
+meta t11 on "$H1" s11
+echo merge=manual >> "$FM/state/t11.meta"
+lint_before=$(wc -l < "$STUB_DIR/lint-calls") gh_before=$(wc -l < "$STUB_DIR/gh-calls")
+check "l: merge=manual -> silent" "$(mog)" ""
+check "l: merge=manual not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
+check "l: merge=manual body not read" "$(wc -l < "$STUB_DIR/gh-calls")" "$gh_before"
+check "l: merge=manual not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
+check "l: merge=manual no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t11.head" ] && echo recorded || echo never)" never
+rm "$FM/state/t11.meta" "$FM/state/t11.run-receipt.json"
+
+# (m) a "## Checks" block saying "not proven": skipped silently, no lint, no merge; the same words
+# outside the Checks block do not skip; an unreadable body refuses once.
+meta t12 on "$H1" s12
+printf 'Summary\n\n## Checks\noutcome: x\nevidence: not proven: no device\n' > "$STUB_DIR/body/12"
+lint_before=$(wc -l < "$STUB_DIR/lint-calls")
+check "m: not proven -> silent" "$(mog)" ""
+check "m: not proven not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
+check "m: not proven not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
+check "m: not proven no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t12.head" ] && echo recorded || echo never)" never
+touch "$STUB_DIR/gh-fail"
+out=$(mog)
+check "m: unreadable body wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
+has "m: unreadable body reason" "$out" "cannot read the PR body: HTTP 502: Bad Gateway"
+check "m: repeat unreadable body silent" "$(mog)" ""
+rm "$STUB_DIR/gh-fail"
+printf '## Checks\nevidence: /x/proof.txt\n\n## Notes\nthe old flow was not proven\n' > "$STUB_DIR/body/12"
+out=$(mog)
+has "m: not proven outside Checks still merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
+check "m: merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 7
+rm "$FM/state/t12.meta" "$FM/state/t12.run-receipt.json"
 
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'

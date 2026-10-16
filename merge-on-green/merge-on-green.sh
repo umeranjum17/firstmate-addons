@@ -4,8 +4,9 @@
 # Usage: merge-on-green.sh check <fm-home>
 #
 # Per home, for each state/<task>.meta with yolo=on and a recorded pr= and pr_head=, it acts only when the
-# task's resolved state (bin/fm-crew-state.sh <task>) says checks green / PR ready. Then, in this order and
-# as separate sequential commands, never piped and never in parallel:
+# task's resolved state (bin/fm-crew-state.sh <task>) says checks green / PR ready. It silently skips a task
+# marked merge=manual and a PR whose "## Checks" block says "not proven" (the lead files the proof gap
+# first). Then, in this order and as separate sequential commands, never piped and never in parallel:
 #   1. FM_HOME=<home> fm-checks-lint.sh <PR URL> <home>/data/<task> - require a PASS in its output.
 #   2. state/<task>.run-receipt.json - require verdict PASS, head == pr_head, spawn_gen == the meta's spawn_gen.
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
@@ -15,7 +16,8 @@
 # timeout wakes truthfully once per task+head+reason like a refusal, records no merge attempt, and is
 # retried next sweep; a fm-crew-state timeout stays silent and is retried next sweep. A merge:
 # one wake line with the verified merged URL, so the lead does the post-merge steps (install from main,
-# teardown).
+# teardown), and the normal "done [at=<epoch>]: merged <PR URL>" line in state/<task>.status, so the
+# lead relays it.
 # One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
 # add-on's own data dir (<home>/data/fm-merge-on-green/<task>.head, <task>.refused), never in state/.
 # Nothing is printed when nothing happened.
@@ -67,6 +69,9 @@ for m in "$STATE"/*.meta; do
   case "$task" in [A-Za-z0-9]*) ;; *) continue ;; esac
   yolo=$(meta_get "$m" yolo); pr=$(meta_get "$m" pr); pr_head=$(meta_get "$m" pr_head); gen=$(meta_get "$m" spawn_gen)
   [ "$yolo" = on ] || continue
+  # The lead marks merge=manual at intake on destructive, irreversible or security-sensitive work and
+  # on work waiting for the captain's own review.
+  [ "$(meta_get "$m" merge)" = manual ] && continue
   [ -n "$pr" ] && [ -n "$pr_head" ] || continue
   # One merge attempt per head: a head already attempted (merged or refused) is never retried.
   [ "$(cat "$DATA/$task.head" 2>/dev/null)" = "$pr_head" ] && continue
@@ -79,6 +84,19 @@ for m in "$STATE"/*.meta; do
     *"checks green: PR ready"*|*"checks green: PR held for merge"*) ;;
     *) continue ;;
   esac
+
+  # A "## Checks" block that says "not proven" is the lead's proof gap to file first: skip silently.
+  body=$(timeout "$BUDGET" gh pr view "$pr" --json body -q .body 2>&1); body_rc=$?
+  if timed_out "$body_rc"; then
+    refuse "reading the PR body timed out after ${BUDGET}s; retrying next sweep" ''
+    continue
+  fi
+  if [ "$body_rc" -ne 0 ]; then
+    refuse "cannot read the PR body: $(first_reason "$body" "$body_rc")" ''
+    continue
+  fi
+  printf '%s\n' "$body" | tr -d '\r' | awk '/^## Checks[[:space:]]*$/ {f=1; next} /^## / {f=0} f' \
+    | grep -qi 'not proven' && continue
 
   # 1. The evidence gate, run as its own command, must print PASS.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
@@ -144,6 +162,10 @@ for m in "$STATE"/*.meta; do
   fi
   if [ "$merge_rc" -eq 0 ]; then
     echo "merge-on-green: merged $task $pr through fm-pr-merge; lead: run the post-merge steps (install from main, teardown)"
+    # The normal merged line, so the lead relays it, plus the fleet-ledger hook every status append runs.
+    echo "done [at=$(date +%s)]: merged $pr" >> "$STATE/$task.status"
+    [ ! -e "$FMH/config/fleet-ledger" ] \
+      || "$FMH/bin/fm-fleet-ledger.sh" appended "$FMH/config" "$STATE/$task.status" >/dev/null 2>&1 || :
   else
     echo "merge-on-green: NOT merging $task $pr: fm-pr-merge refused: $(first_reason "$merge_out" "$merge_rc")"
   fi
