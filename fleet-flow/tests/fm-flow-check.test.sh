@@ -5,6 +5,7 @@
 # a working one, a captain-held one and a 5 h one that has resumed still count; only long-wait
 # candidates are probed; --can-start frees the slot; --summary prints dry=1 and dry=0.
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 CHECK=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)/bin/fm-flow-check.sh
 d=$(mktemp -d)
 trap 'rm -rf -- "$d"' EXIT
