@@ -52,6 +52,12 @@ expect 'captain-held and short waits are never probed' '' "$(grep -xE 'held5|ext
 rc=0; out=$(run --can-start) || rc=$?
 expect '--can-start passes with freed slots' '0 ' "$rc $out"
 
+# --target reads landed lanes only: it must not spend the 15 s probe deadline inside the watcher's 30 s window.
+rm -f "$home/probed"
+out=$(run --target)
+expect '--target probes no lanes' '' "$(cat "$home/probed" 2>/dev/null || true)"
+expect '--target still prints the percentile line' 'muxr landed lanes 14d n=0 too few for P50/P85; red line uses 24h' "$out"
+
 # Cap 5, nothing ready: 4 counting lanes under the cap is a dry home.
 printf 'muxr 5\n' > "$main/config/lane-caps"
 echo 0 > "$home/ready-count"

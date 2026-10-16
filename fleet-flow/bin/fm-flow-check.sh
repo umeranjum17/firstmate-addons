@@ -72,6 +72,11 @@ def target():
     if len(x) < 5: return None, None, len(x)
     return st.median(x), x[int(.85 * len(x))], len(x)
 
+if mode == '--target':
+    p50, p85, n = target()
+    print(f'{name} landed lanes 14d n={n} ' + (f'P50={p50:.1f}h P85={p85:.1f}h' if p50 is not None else 'too few for P50/P85; red line uses 24h'))
+    sys.exit(0)
+
 # Lanes
 lanes = []
 for m in glob.glob(f'{S}/*.meta'):
@@ -120,11 +125,6 @@ def ready_ids():
                        env={**os.environ, 'FM_HOME': home})
     if r.returncode: raise RuntimeError(f'ready query exit {r.returncode}: ' + (r.stderr.strip().splitlines() or [''])[-1])
     return re.findall(r'^\s{2}([\w.-]+),queued', r.stdout, re.M)
-
-if mode == '--target':
-    p50, p85, n = target()
-    print(f'{name} landed lanes 14d n={n} ' + (f'P50={p50:.1f}h P85={p85:.1f}h' if p50 is not None else 'too few for P50/P85; red line uses 24h'))
-    sys.exit(0)
 
 land = [L for L in lanes if L['verb'] == 'done' and NOW - L['since'] >= 900]
 if mode == '--summary':
