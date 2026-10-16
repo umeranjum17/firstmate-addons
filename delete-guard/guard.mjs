@@ -28,16 +28,22 @@ function unquoted(s) {
 }
 
 // The mktemp bare-variable exception: the last assignment to it before the delete, in the same command, is its own
-// statement d=$(mktemp ...) with any options or template (mktemp always makes a fresh unique path), and it is not a
-// variable the shell or runtime sets. The target must be exactly "$d" or "${d}".
+// statement d=$(mktemp ...) with any options or template (mktemp always makes a fresh unique path), or
+// d=$(mktemp ... || mktemp ...) where every || alternative is a mktemp call, and it is not a variable the shell or
+// runtime sets. The target must be exactly "$d" or "${d}".
 function freshTempVar(arg, segments, at) {
 	const name = (arg.match(/^\$(\w+)$|^\$\{(\w+)\}$/) ?? []).slice(1).find(Boolean);
 	if (!name || SHELL_VARS.test(name)) return false;
 	const assigns = assignsRe(name);
+	const stmt = new RegExp(`^${name}=("?)\\$\\((.*)\\)\\1$`, "s");
 	let fresh = false;
 	for (let j = 0; j <= at; j++) {
 		if (!assigns.test(unquoted(segments[j].s))) continue;
-		fresh = j < at && new RegExp(`^${name}=("?)\\$\\(\\s*mktemp\\s*[^\\x60;$&()]*\\)\\1$`).test(segments[j].s.trim());
+		// An unquoted || inside $( ) split the statement into segments; rejoin them until its parentheses balance.
+		let s = segments[j].s, end = j;
+		while (end + 1 < at && (s.match(/\(/g) ?? []).length > (s.match(/\)/g) ?? []).length) s += segments[++end].sep + segments[end].s;
+		const body = j < at && s.trim().match(stmt)?.[2];
+		fresh = !!body && body.split("||").every((alt) => /^\s*mktemp(\s[^\x60;$&|()]*)?$/.test(alt));
 	}
 	return fresh;
 }

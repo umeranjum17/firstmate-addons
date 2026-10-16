@@ -32,6 +32,7 @@ blocked=('rm -rf "$HOME"' 'rm -rf ~' 'rm -rf ~/' 'rm -fr $HOME/*' 'rm -r -f /hom
   'rm -rf -- "$d"' 'd=$(mktemp -d); d=$HOME; rm -rf "$d"' 'd=$(mktemp -d); rm -rf "$d/.."' 'd=$(mktemp -d); rm -rf "$d"/../x'
   'd=$(mktemp -d); rm -rf ${d:-/}' 'HOME=$(mktemp -d); rm -rf "$HOME"' 'd=$(mktemp -d) node t.js; rm -rf "$d"'
   'd=$(mktemp -d); read d; rm -rf "$d"' 'TMPDIR=$(mktemp -d); rm -rf "$TMPDIR"' '(d=$(mktemp -d)); rm -rf "$d"' $'cat > f <<EOF\nhi\nEOF\nrm -rf ~'
+  'd=$(mktemp -d || echo ~); rm -rf -- "$d"' 'd=$(mktemp -d && echo ~); rm -rf -- "$d"' 'd=$(mktemp -d || mktemp -d) || d=~; rm -rf "$d"'
   $'bash <<EOF\nrm -rf ~\nEOF' $'cat <<\'EOF\' | sh\nrm -rf "$HOME"\nEOF' $'zsh <<-EOF\n\trm -rf /\n\tEOF'
   'S=~; rm -rf "$S"' 'S=/home/umer; rm -rf "$S"' 'S=$HOME/x; rm -rf "$S"' 'S=~/.cache/x; S=~; rm -rf "$S"'
   '[ -n x ] && S=~/.cache/x && rm -rf "$S"' 'rm -rf "$S"' 'S=~/.cache/x; rm -rf "$S/.."' 'd=$(mktemp -d); d=~; rm -rf "$d"'
@@ -44,6 +45,9 @@ allowed=('rm -rf ./build' 'rm -rf node_modules' 'd=$(mktemp -d); rm -rf -- "$d/x
   $'python3 - <<\'EOF\'\nprint("rm -rf ~")\nEOF'
   'SCRATCH=~/.cache/fm-scratch/lfm-doctor-real-checks/proof && rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"' 'S=~/.cache/x; rm -rf "$S"'
   'd=$(mktemp -d /some/dir/maintest.XXXX); rm -rf "$d"' 'd=$(mktemp -p ~/.cache -d); rm -rf "$d"' 'd=$(mktemp -d -p ~); rm -rf "$d"'
+  'd=$(mktemp -d -p /tmp/x 2>/dev/null || mktemp -d); rm -rf -- "$d"' 'd=$(mktemp -d || mktemp -d); rm -rf -- "$d"'
+  'd=$(mktemp -d -p /tmp/x 2>/dev/null); rm -rf -- "$d"' 'd="$(mktemp -d -p /tmp/x || mktemp -d)"; rm -rf "$d"'
+  $'d=$(mktemp -d -p /tmp/x 2>/dev/null || mktemp -d)\ncd "$d" && make\nrm -rf -- "$d"'
   $'d=$(mktemp -d); REPO=/repo; CLI=$REPO/bin/cli.mjs; FAKE=$REPO/test/fake-agent/claude\nmkdir -p "$d/fakes" "$d/home" "$d/p"\nln -s "$FAKE" "$d/fakes/claude"; ln -s "$FAKE" "$d/fakes/codex"\nprintf \'agent: claude\\njudge_agent: codex\\n\' > "$d/home/config.yaml"\ncp "$REPO/examples/defects.md" "$d/p/"\nprintf \'\\n## %s\\n\\n- [tests] Umer tests failed: UMER_FIXTURES was unset.\\n- [tests] They failed again for the same reason.\\n\' "$(date -Is)" >> "$d/p/defects.md"\nHOME="$d/home" node "$CLI" retro --project "$d/p" || true\nrm -rf -- "$d"')
 n=0
 for c in "${blocked[@]}"; do n=$((n + 1)); if hookrun "/tmp/case-$n" "$c"; then no "MISSED: $c"; fi; done
