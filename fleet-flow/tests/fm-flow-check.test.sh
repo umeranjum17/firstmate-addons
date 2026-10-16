@@ -60,7 +60,7 @@ expect '--target probes no lanes' '' "$(cat "$home/probed" 2>/dev/null || true)"
 expect '--target still prints the percentile line' 'muxr landed lanes 14d n=0 too few for P50/P85; red line uses 24h' "$out"
 
 # Cap 4, nothing ready: the two long waits freed their slots and nothing refills them —
-# dry even though 4 lanes still count (working = 2 is what the dry predicate reads).
+# dry even though 4 lanes still count (working = 1 is what the dry predicate reads).
 printf 'muxr 4\n' > "$main/config/lane-caps"
 echo 0 > "$home/ready-count"
 expect 'dry=1 with no ready work and working < cap' 1 "$(run --summary | cut -f9)"
