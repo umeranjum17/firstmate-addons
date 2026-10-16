@@ -18,8 +18,13 @@ function words(segment) {
 }
 
 // Assignments to $name, including read/unset/for and ${name:=x} forms: any of these replaces a previous value.
+// Tested on the segment with quoted spans removed, so a word like "unset" inside a string never counts as one.
 function assignsRe(name) {
 	return new RegExp(`(^|[\\s;({])(export\\s+|local\\s+|readonly\\s+|typeset\\s+|declare(\\s+-\\w+)*\\s+)?${name}\\+?=|\\$\\{${name}:?=|\\b(read|for|unset|mapfile|readarray|printf\\s+-v)\\b.*\\b${name}\\b`);
+}
+
+function unquoted(s) {
+	return s.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, " ");
 }
 
 // The mktemp bare-variable exception: the last assignment to it before the delete, in the same command, is its own
@@ -31,7 +36,7 @@ function freshTempVar(arg, segments, at) {
 	const assigns = assignsRe(name);
 	let fresh = false;
 	for (let j = 0; j <= at; j++) {
-		if (!assigns.test(segments[j].s)) continue;
+		if (!assigns.test(unquoted(segments[j].s))) continue;
 		fresh = j < at && new RegExp(`^${name}=("?)\\$\\(\\s*mktemp\\s*[^\\x60;$&()]*\\)\\1$`).test(segments[j].s.trim());
 	}
 	return fresh;
@@ -60,7 +65,7 @@ function literalValue(arg, segments, at) {
 	const stmt = new RegExp(`^(?:export\\s+|local\\s+|readonly\\s+|typeset\\s+|declare(?:\\s+-\\w+)*\\s+)?${name}=(.+)$`);
 	let value = null;
 	for (let j = 0; j < at; j++) {
-		if (!assigns.test(segments[j].s)) continue;
+		if (!assigns.test(unquoted(segments[j].s))) continue;
 		value = null; // the last assignment decides; anything else it could be leaves the value unknown
 		const m = segments[j].s.trim().match(stmt);
 		if (!m || !["", ";", "\n"].includes(segments[j].sep) || nested(segments, j)) continue;
@@ -127,6 +132,15 @@ export function blockedDelete(command) {
 	return null;
 }
 
+// Log rows keep any block replayable: the whole command, or the head plus the part around the blocked delete.
+function loggedCommand(command, target) {
+	const cmd = String(command);
+	if (cmd.length <= 600) return cmd;
+	const at = cmd.lastIndexOf(target);
+	const around = cmd.slice(Math.max(0, (at < 0 ? cmd.length : at) - 250), (at < 0 ? cmd.length : at) + 350);
+	return `${cmd.slice(0, 600)} …[${cmd.length} chars total; around the delete: ${around}]`;
+}
+
 function escalate(row) {
 	let home = "";
 	try { home = readFileSync(`${dirname(SELF)}/home`, "utf8").trim(); } catch {}
@@ -154,7 +168,7 @@ export function guard(command, { cwd = process.cwd(), runtime = "unknown" } = {}
 	for (let d = resolve(cwd); !home && d !== "/"; d = dirname(d)) if (existsSync(`${d}/bin/fm-wake-lib.sh`) && existsSync(`${d}/state`)) home = d;
 	if (!home && env.FM_TASK_INBOX) home = dirname(dirname(env.FM_TASK_INBOX));
 	home = home || env.FM_HOME || "";
-	const row = { at: new Date().toISOString(), home, task: env.FM_TASK_ID || "", cwd, runtime, target, command: String(command).slice(0, 600) };
+	const row = { at: new Date().toISOString(), home, task: env.FM_TASK_ID || "", cwd, runtime, target, command: loggedCommand(command, target) };
 	let note = "";
 	try { escalate(row); } catch (e) { note = ` (the block could not be logged: ${e.message})`; }
 	return (
