@@ -83,8 +83,9 @@ refactor.
    can miss the journey's own timing budget, so record a run that fails
    only on timing rather than treating it as a behavior change (at most 3
    runs; with no pass, stop with the outputs).
-4. Run the repository CI gate (ShellCheck plus the syntax check over every
-   add-on script); it must pass on the PR head. The moved script carries
+4. Run the repository CI gate (ShellCheck, the syntax check over every
+   add-on script, and the memory gate's stubbed integration test); it must
+   pass on the PR head. The moved script carries
    `# shellcheck source=bin/...` directives for sibling fork libraries
    that did not move, so the gate exempts `SC1091` for `host-memory/bin/`
    only, never editing the copy.
