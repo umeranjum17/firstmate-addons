@@ -10,7 +10,9 @@
 # accounts: with config/account-pool-autorelaunch present a Claude worker
 # moves to the next account, a Claude worker with no next account takes the
 # route move, and OpenCode Go and Codex workers only rest; with the file gone
-# a Claude worker only rests, once. Needs bash, jq, flock, timeout, sed and stat
+# a Claude worker only rests, once, and rests and wakes again when the same
+# account stops a new incarnation, while a pool rest that fails still wakes
+# the home, once. Needs bash, jq, flock, timeout, sed and stat
 # on PATH; no real tool or home is touched.
 set -u
 
@@ -48,7 +50,7 @@ fm_quota_json_valid() { jq -e '.schemaVersion == 5 and (.providers | type) == "a
 fm_quota_single_provider_for_harness() { return 1; }
 fm_parent_channel_report() { printf '%s\n' "$3" >>"$1/state/parent-channel.log"; }
 fm_account_pool_config() { [ ! -f "$1/account-pool" ] || printf 'byokit-accounts\t/pool\n'; }
-fm_account_pool_rest() { printf 'rest %s\n' "$3" >>"$FM_HOME/state/pool.log"; }
+fm_account_pool_rest() { [ "$3" = deadpool ] && { echo pool lib broken >&2; return 1; }; printf 'rest %s\n' "$3" >>"$FM_HOME/state/pool.log"; }
 #--- home/bin/fm-crew-state.sh
 #!/usr/bin/env bash
 echo 'state: working · source: fixture'
@@ -132,9 +134,9 @@ is "pass2: every route is back in dispatch" \
 # Pool workers, each stopped with the limit on its screen.
 printf 'state=/pool\n' >"$home/config/account-pool"
 touch "$home/config/account-pool-autorelaunch"
-pool() { # <id> <harness> <model> <account>
-  printf 'endpoint_task_id=%s\nharness=%s\nmodel=%s\nkind=crewmate\nspawn_gen=s0.%s\naccount=%s\n' \
-    "$1" "$2" "$3" "$1" "$4" >"$home/state/$1.meta"
+pool() { # <id> <harness> <model> <account> [generation]
+  printf 'endpoint_task_id=%s\nharness=%s\nmodel=%s\nkind=crewmate\nspawn_gen=%s\naccount=%s\n' \
+    "$1" "$2" "$3" "${5:-s0.$1}" "$4" >"$home/state/$1.meta"
   printf '%s\n' "You've hit your usage limit for your plan; try again in 3h" >"$home/state/$1.screen"
 }
 pool a1 claude claude-opus-4-8 c1
@@ -157,18 +159,36 @@ has "pass3: the Go wake names the account and the manual command" "$wake" \
   'g1 stopped on opencode opencode-go/mimo-v2.6-flash account go1 .*bin/fm-control.sh g1 relaunch --account <id>$'
 is "pass3: an account limit leaves the route in dispatch" "$(jq -c . "$dead")" '[]'
 
-# The switch file is gone: a Claude pool worker only rests, and a second pass
-# rests and wakes nothing more.
+# The switch file is gone: a Claude pool worker only rests, a second pass
+# rests and wakes nothing more, and a worker whose pool rest fails still
+# wakes the home, once.
 rm -f "$home/config/account-pool-autorelaunch" "$wake" "$pooll"
 pool b1 claude claude-opus-4-8 c3
+pool f1 claude claude-opus-4-8 deadpool
 run
 run
 
 count "pass4: no relaunch without the switch file" "$ctl" '^b1 ' 0
+count "pass4: no relaunch for the failed-rest worker either" "$ctl" '^f1 ' 0
 is "pass4: the account rested once" "$(cat "$pooll")" "rest c3"
 has "pass4: one log line names the account and the manual command" "$log" \
   'b1: stopped on claude claude-opus-4-8 account c3 .*bin/fm-control.sh b1 relaunch --account <id|next>$'
-count "pass4: one wake line" "$wake" '' 1
+has "pass4: a failed rest is logged with the pool's error" "$log" \
+  'f1: stopped on claude claude-opus-4-8 account deadpool .*rest failed (pool lib broken), move it by hand'
+has "pass4: a failed rest still wakes the home with the account named" "$wake" \
+  'f1 stopped on claude claude-opus-4-8 account deadpool .*bin/fm-control.sh f1 relaunch --account <id|next>$'
+count "pass4: one wake line per stopped worker" "$wake" '' 2
+
+# The home takes the wake's advice and relaunches b1 on the same account c3;
+# the new incarnation hits the limit again, and the rest and the wake happen
+# once per stop, so both fire again.
+pool b1 claude claude-opus-4-8 c3 s1.b1
+run
+
+is "pass5: the same account rests again for the new incarnation" "$(cat "$pooll")" "rest c3
+rest c3"
+count "pass5: and the wake fires again for the new stop" "$wake" 'b1 stopped' 2
+count "pass5: the failed-rest wake stays at one line" "$wake" 'f1 stopped' 1
 
 if [ "$fails" -eq 0 ]; then
   echo "quota-failover e2e: all assertions held"

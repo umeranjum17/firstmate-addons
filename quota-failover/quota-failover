@@ -306,13 +306,15 @@ for meta in "$STATE"/*.meta; do
     else
       hand='<id|next>'
       auto_move "$h" "$m" || hand='<id>'
-      text="stopped on $route account $acct ($why); account rested, move it by hand: bin/fm-control.sh $id relaunch --account $hand"
+      text="stopped on $route account $acct ($why, gen $gen); account rested, move it by hand: bin/fm-control.sh $id relaunch --account $hand"
       [ "$(last "$id")" != "$text" ] || continue
       if out=$(fm_account_pool_rest "${pool%%$'\t'*}" "${pool#*$'\t'}" "$acct" 2>&1); then
         log "$id: $text"
         printf 'quota-failover: %s %s\n' "$id" "$text" >>"$WAKE"
       else
-        note "$id" "stopped on $route account $acct ($why); rest failed: $out"
+        errline=${out%%$'\n'*}
+        ftext="stopped on $route account $acct ($why, gen $gen); rest failed ($errline), move it by hand: bin/fm-control.sh $id relaunch --account $hand"
+        [ "$(last "$id")" = "$ftext" ] || { log "$id: $ftext"; printf 'quota-failover: %s %s\n' "$id" "$ftext" >>"$WAKE"; }
       fi
       continue
     fi
