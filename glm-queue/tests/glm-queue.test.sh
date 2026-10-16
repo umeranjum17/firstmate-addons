@@ -5,6 +5,9 @@
 # 1. 20 parallel clients through a queue of N=4: the upstream never sees more than 4 at once, and all 20 complete
 #    with the upstream's answer, path and Authorization header unchanged.
 # 2. A streamed (SSE) response streams: its first chunk reaches the client before the upstream has sent the last.
+# 3. A truncated Content-Length response fails fast: the upstream declares 100 bytes, sends 10, then RSTs; the client
+#    sees the failure in milliseconds (never a hang), the queue logs the error with its slot drained, and the next call
+#    completes.
 Q=${1:-$(dirname "$(readlink -f "$0")")/../glm-queue.mjs}
 T=$(mktemp -d); trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$T"' EXIT
 N=4
@@ -24,6 +27,10 @@ require("http").createServer((req, res) => {
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write("data: first\n\n");
       setTimeout(() => { open--; res.end("data: last\n\n"); }, 800);
+    } else if (req.url === "/truncated") {
+      res.writeHead(200, { "content-type": "application/json", "content-length": "100" });
+      res.write("1234567890");
+      setTimeout(() => { open--; res.socket.destroy(); }, 50);
     } else setTimeout(() => { open--; res.end(`${req.method} ${req.url} ${req.headers.authorization} ${body}`); }, 300);
   });
 }).listen(process.env.UPORT, "127.0.0.1");' &
@@ -55,6 +62,27 @@ require("http").get(`http://127.0.0.1:${process.env.QPORT}/stream`, (r) => {
 });')
 [ "${first:-9999}" -lt 600 ] && [ "${last:-0}" -ge 800 ] && echo "PASS stream: first chunk at ${first} ms, end at ${last} ms" \
   || { echo "FAIL stream not streamed: first chunk at ${first:-never} ms, end at ${last:-never} ms"; fail=1; }
+
+# How the client experiences a truncated Content-Length response: verdict (aborted/error/end/hung) and elapsed ms.
+read -r verdict ms < <(QPORT=$QPORT node -e '
+const t0 = Date.now(); let said = false; let timer; let r;
+const done = (how) => { if (said) return; said = true; clearTimeout(timer); if (r) r.destroy(); console.log(how, Date.now() - t0); };
+r = require("http").get(`http://127.0.0.1:${process.env.QPORT}/truncated`, (res) => {
+  res.on("data", () => {});
+  res.on("aborted", () => done("aborted"));
+  res.on("end", () => done("end"));
+  res.on("error", () => done("error"));
+});
+r.on("error", () => done("error"));
+timer = setTimeout(() => done("hung"), 3500);')
+{ [ "${verdict:-}" = aborted ] || [ "${verdict:-}" = error ]; } && [ "${ms:-99999}" -lt 3000 ] \
+  && echo "PASS truncated body: client saw $verdict at ${ms} ms" \
+  || { echo "FAIL truncated body: client saw ${verdict:-nothing} at ${ms:-never} ms"; fail=1; }
+[ "$(curl -s -H 'Authorization: Bearer test-key' -d after-truncated "127.0.0.1:$QPORT/api/coding/paas/v4/chat/completions?after")" \
+  = "POST /api/coding/paas/v4/chat/completions?after Bearer test-key after-truncated" ] \
+  && echo "PASS the call after the truncation completed (slot freed)" || { echo "FAIL slot wedged after truncation"; fail=1; }
+grep -q '^status=upstream-error .* in_flight=0 ' "$T/queue.log" && echo "PASS truncation logged with the slot drained" \
+  || { echo "FAIL no drained upstream-error line in log:"; sed 's/^/  /' "$T/queue.log"; fail=1; }
 
 grep -q 'Bearer\|test-key\|call-' "$T/queue.log" && { echo "FAIL the queue logged request content"; fail=1; }
 exit $fail
