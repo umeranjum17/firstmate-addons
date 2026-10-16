@@ -234,6 +234,13 @@ out=$(mog)
 has "m: newest proven block merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
 check "m: merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 7
 rm "$FM/state/t12.meta" "$FM/state/t12.run-receipt.json"
+# a bare '##' line also ends the newest block, like the evidence gate's own lookahead
+meta t13 on "$H1" s13
+printf '## Checks\nevidence: /x/proof.txt\n##\nnot proven: legacy note\n' > "$STUB_DIR/body/13"
+out=$(mog)
+has "m: bare ## ends the Checks block" "$out" "merged t13 https://github.com/ex/r/pull/13"
+check "m: bare ## merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 8
+rm "$FM/state/t13.meta" "$FM/state/t13.run-receipt.json"
 
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'
