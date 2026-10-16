@@ -41,17 +41,16 @@ is() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1: got [$2], want [$3]"; fi; 
 has() { if grep -qF -- "$3" "$2" 2>/dev/null; then ok "$1"; else no "$1: $2 lacks [$3]"; fi; }
 lacks() { if grep -qF -- "$3" "$2" 2>/dev/null; then no "$1: $2 must not contain [$3]"; else ok "$1"; fi; }
 
-# shellcheck disable=SC2329 # invoked through the EXIT trap
-cleanup() {
-  local rc=$?
+# shellcheck disable=SC2317 # the EXIT trap runs this; ShellCheck 0.9 cannot see that
+trap '{
+  rc=$?
   trap - EXIT
   tmux kill-session -t "$SES" 2>/dev/null
   tmux kill-session -t "$SES2" 2>/dev/null
   rm -rf "$work"
   echo "e2e cleanup: $rc"
   exit "$rc"
-}
-trap cleanup EXIT
+}' EXIT
 
 # --- the fixture fleet: a supervising home with two secondmate homes ---------
 mkdir -p "$P/config" "$P/state" "$P/data" "$work/home-a/state" "$work/home-b/state"
