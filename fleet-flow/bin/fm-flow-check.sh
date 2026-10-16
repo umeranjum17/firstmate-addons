@@ -5,13 +5,16 @@
 #        fm-flow-check.sh <home> --can-start  exit 0 when the lead may start a lane, 1 otherwise (prints why)
 #        fm-flow-check.sh <home> --target     P50/P85 lane hours from lanes landed in 14 days
 #        fm-flow-check.sh <home> --summary    one TSV row for Main's pulse:
-#                                             home open working ready donewait oldest_wait_h min_since_working
+#                                             home open working ready donewait oldest_wait_h min_since_working counted dry
 # Line order: land, over-cap, wait, red, split, budget, key, pull. Format: <task> <actor> <age> <next action>.
 # Lane = live state/<task>.meta with kind=ship|scout. Lane age starts at the birth of data/<task>/.
+# A lane in a long external wait (see FREE_AFTER) keeps its record but stops counting toward the cap:
+# counted = open lanes that count; dry = 1 when ready = 0 and counted < cap.
+# FM_MAIN_HOME names Main's home (default /home/umer/firstmate), where lane-caps, the status rollup and bin/ live.
 import os, re, sys, glob, json, time, subprocess, statistics as st
 
 CAP = 4
-MAIN = '/home/umer/firstmate'
+MAIN = os.environ.get('FM_MAIN_HOME') or '/home/umer/firstmate'
 NAMES = {'1': 'takeone', '3': 'crewhouse', '4': 'writeboost', '8': 'muxr', '9': 'desklink', '10': 'byokit'}
 AT = re.compile(r'\[at=(\d+)\]')
 VERB = re.compile(r'^(?:\d{9,11}\s+)?([a-z][a-z-]*)')
@@ -81,11 +84,33 @@ for m in glob.glob(f'{S}/*.meta'):
     v = VERB.match(last); v = v.group(1) if v else 'working'
     keys = open_keys(ls, mt)
     lanes.append(dict(t=t, meta=meta, verb=v, since=stamp(last, mt), keys=keys,
-                      age=NOW - (birth(f'{D}/{t}') or mt),
+                      at=stamp(last, None) if ls else None, age=NOW - (birth(f'{D}/{t}') or mt),
                       captain=any(k.startswith('captain-hold') for k in keys)))
 open_n = len(lanes)
+# Retro 16 Oct #4 (Main3491): a lane whose last event is paused, blocked or failed, stamped more than 4 h ago, not
+# waiting on the captain, and still that wait in bin/fm-crew-state.sh (so validating and own busy work stay working)
+# stops counting toward the cap; a ready item takes its slot. An unstamped wait or an unreadable state keeps counting.
+FREE_AFTER = 4 * 3600
+
+def crew_state(t):
+    try:
+        return subprocess.Popen([f'{MAIN}/bin/fm-crew-state.sh', t], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                text=True, env={**os.environ, 'FM_HOME': home, 'FM_CREW_STATE_NO_FORGE': '1'})
+    except OSError:
+        return None
+
+probes = {L['t']: crew_state(L['t']) for L in lanes
+          if L['verb'] in ('paused', 'blocked', 'failed') and not L['captain'] and L['at'] and NOW - L['at'] > FREE_AFTER}
+deadline = time.time() + 15
+for L in lanes:
+    p, out = probes.get(L['t']), ''
+    if p:
+        try: out = p.communicate(timeout=max(0.1, deadline - time.time()))[0]
+        except subprocess.TimeoutExpired: p.kill(); p.wait()
+    L['free'] = bool(re.match(r'state: (paused|blocked|failed) ', out))
+count_n = open_n - sum(L['free'] for L in lanes)
 # Working lanes count toward the cap; waiting, parked and captain-held lanes do not (captain 7 Oct "Do what you
-# feel is right" on the 200-merges plan). HARD bounds all open lanes so waits cannot pile up without limit.
+# feel is right" on the 200-merges plan). HARD bounds the open lanes that count, so waits under FREE_AFTER cannot pile up.
 active_n = sum(L['verb'] in ('working', 'resolved') and not L['captain'] for L in lanes)
 HARD = CAP + 2
 
@@ -111,13 +136,14 @@ if mode == '--summary':
     waits = [NOW - L['since'] for L in lanes if L['verb'] not in ('working', 'resolved', 'done', 'failed')]
     lw = max([L['since'] for L in lanes if L['verb'] in ('working', 'resolved')] or [0])
     print('\t'.join(map(str, [name, open_n, working, ready_n, sum(L['verb'] == 'done' for L in lanes),
-                              f'{max(waits) / 3600:.1f}' if waits else '0', (NOW - lw) // 60 if lw else -1])))
+                              f'{max(waits) / 3600:.1f}' if waits else '0', (NOW - lw) // 60 if lw else -1,
+                              count_n, int(ready_n == 0 and count_n < CAP)])))
     sys.exit(0)
 
 if mode == '--can-start':
     why = []
     if active_n >= CAP: why.append(f'{active_n} working lanes, cap {CAP}: finish one first')
-    if open_n >= HARD: why.append(f'{open_n} open lanes, hard cap {HARD}: land or close a waiting lane first')
+    if count_n >= HARD: why.append(f'{count_n} open lanes, hard cap {HARD}: land or close a waiting lane first')
     # Captain 10 Oct (retro C3, Main2060): a done lane blocks starts only after 60 min unmerged; open >= cap+2 still blocks.
     why += [f'{L["t"]} is done {h(NOW - L["since"])} ago: land and clean it up first' for L in land if not L['captain'] and NOW - L['since'] >= 3600]
     for w in why: print(w)
@@ -126,8 +152,8 @@ if mode == '--can-start':
 out = []  # (key, age_seconds, text)
 for L in land:
     out.append((f'land {L["t"]}', NOW - L['since'], f'{L["t"]} lead {h(NOW - L["since"])} land it: merge if green (bin/fm-pr-merge.sh), then bin/fm-teardown.sh'))
-if open_n > HARD:
-    out.append((f'over-cap', open_n, f'home lead {open_n}/{HARD} over hard cap: start nothing; land nearest-to-merge, stop the oldest with a learned note'))
+if count_n > HARD:
+    out.append((f'over-cap', count_n, f'home lead {count_n}/{HARD} over hard cap: start nothing; land nearest-to-merge, stop the oldest with a learned note'))
 for L in lanes:
     clock = 1800 if L['verb'] == 'needs-decision' else 7200
     # failed = stopped on purpose, kept for an unlanded-work refusal; no one waits on it, the red age rule still surfaces it (takeone, 8 Oct)

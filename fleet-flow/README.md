@@ -15,6 +15,9 @@ today.
   local homes in, one `fm-flow.v1` document out; no endpoint or cache writes.
 - `tests/fm-flow.test.sh` — the fork's integration test for that reader over
   isolated durable records.
+- `bin/fm-flow-check.sh` — the home flow check (below); live once installed.
+- `install.sh` — installs the flow check.
+- `tests/fm-flow-check.test.sh` — the flow check's integration test.
 
 The reader sources `fm-classify-lib.sh`, `fm-tasks-axi-lib.sh` and
 `fm-backlog-transition-lib.sh` from its own directory and runs the
@@ -22,6 +25,20 @@ home-addressed `fm-tasks-axi.sh` backlog consumer beside it; those fork files
 did not move, so the moved copy only runs with them next to it (see the proof
 below). The same is true of the moved test, which also drives the fork's
 model/skill statistics and outcome-recording readers.
+
+## Home flow check: lane slots and dry
+
+`bin/fm-flow-check.sh <home> [--can-start|--target|--summary]` is the home flow check every lead's `state/flow.check.sh` runs, and it owns the open-lane count against `config/lane-caps` that the `--can-start` hard cap, the over-cap line and the fleet-pulse row share.
+A lane whose last status event is `paused`, `blocked` or `failed`, stamped `[at=]` more than 4 h ago, not waiting on the captain, and still read as that wait by `bin/fm-crew-state.sh`, keeps its worktree and record but stops counting toward the cap, so a ready item takes its slot.
+Validating and own busy work read as working there and keep counting; an unstamped wait, or a state that cannot be read within 15 s, keeps counting.
+Only those long-wait candidates are probed, in parallel.
+`--summary` appends `counted` (open lanes that count) and `dry` (1 when ready = 0 and counted < cap) to its row.
+`FM_MAIN_HOME` names Main's home (default `/home/umer/firstmate`).
+
+Moved from Main's `config/fm-flow-check.sh` (sha256 `6e353c9e...4ed2`) in the first commit, then changed.
+Install with `fleet-flow/install.sh [--dry-run]`: it copies the check to `${XDG_DATA_HOME:-~/.local/share}/fm-fleet-flow/fm-flow-check.sh`, is idempotent, and `--dry-run` writes nothing.
+Main's `config/fm-flow-check.sh` then becomes a symlink to that copy, not an exec shim, because `bin/fm-flow.sh` reads its stage-clock policy from that file's text.
+Test: `tests/fm-flow-check.test.sh` drives the real check over a fixture Main home and one lead home with stub `fm-tasks-axi.sh` and `fm-crew-state.sh`.
 
 ## Frozen contract (identical to the fork)
 
