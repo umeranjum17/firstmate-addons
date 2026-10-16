@@ -12,6 +12,9 @@ const HOMES = [...new Set([userInfo().homedir, homedir()].map((h) => h.replace(/
 const REPEAT_SECS = 600;
 const BARE_VAR = /^(\$\w+|\$\{[^}]+\})(\/+(\.?\*|\.)?)?$/; // $X, ${X:-y}, $X/, $X/*, $X/.
 const SHELL_VARS = /^(HOME|PWD|OLDPWD|TMPDIR|TMP|TEMP|USER|LOGNAME|SHELL|PATH|IFS|BASH\w*|(XDG|FM|CLAUDE|CODEX|HERDR|PI|OPENCODE|NO_MISTAKES)_\w*)$/;
+// An optional declaration keyword before an assignment, with only the plain flags -r -x -g: -n (a nameref such as
+// declare -n T=HOME) and any other flag change what the value means, so such a statement never counts as a plain one.
+const DECL = String.raw`(?:(?:export|local|readonly|typeset|declare)(?:\s+-[rxg]+)*\s+)?`;
 
 function words(segment) {
 	return (segment.match(/(?:"[^"]*"|'[^']*'|[^\s"'])+/g) ?? []).map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, "$1$2"));
@@ -28,14 +31,14 @@ function unquoted(s) {
 }
 
 // The mktemp bare-variable exception: the last assignment to it before the delete, in the same command, is its own
-// statement d=$(mktemp ...) with any options or template (mktemp always makes a fresh unique path), or
+// statement d=$(mktemp ...) (optionally after export, local, declare -r and the like) with any options or template (mktemp always makes a fresh unique path), or
 // d=$(mktemp ... || mktemp ...) where every || alternative is a mktemp call, and it is not a variable the shell or
 // runtime sets. The target must be exactly "$d" or "${d}".
 function freshTempVar(arg, segments, at) {
 	const name = (arg.match(/^\$(\w+)$|^\$\{(\w+)\}$/) ?? []).slice(1).find(Boolean);
 	if (!name || SHELL_VARS.test(name)) return false;
 	const assigns = assignsRe(name);
-	const stmt = new RegExp(`^${name}=("?)\\$\\((.*)\\)\\1$`, "s");
+	const stmt = new RegExp(`^${DECL}${name}=("?)\\$\\((.*)\\)\\1$`, "s");
 	let fresh = false;
 	for (let j = 0; j <= at; j++) {
 		if (!assigns.test(unquoted(segments[j].s))) continue;
@@ -68,7 +71,7 @@ function literalValue(arg, segments, at) {
 	const name = (arg.match(/^\$(\w+)$|^\$\{(\w+)\}$/) ?? []).slice(1).find(Boolean);
 	if (!name || SHELL_VARS.test(name)) return null;
 	const assigns = assignsRe(name);
-	const stmt = new RegExp(`^(?:export\\s+|local\\s+|readonly\\s+|typeset\\s+|declare(?:\\s+-\\w+)*\\s+)?${name}=(.+)$`);
+	const stmt = new RegExp(`^${DECL}${name}=(.+)$`);
 	let value = null;
 	for (let j = 0; j < at; j++) {
 		if (!assigns.test(unquoted(segments[j].s))) continue;

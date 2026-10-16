@@ -36,6 +36,8 @@ blocked=('rm -rf "$HOME"' 'rm -rf ~' 'rm -rf ~/' 'rm -fr $HOME/*' 'rm -r -f /hom
   $'bash <<EOF\nrm -rf ~\nEOF' $'cat <<\'EOF\' | sh\nrm -rf "$HOME"\nEOF' $'zsh <<-EOF\n\trm -rf /\n\tEOF'
   'S=~; rm -rf "$S"' 'S=/home/umer; rm -rf "$S"' 'S=$HOME/x; rm -rf "$S"' 'S=~/.cache/x; S=~; rm -rf "$S"'
   '[ -n x ] && S=~/.cache/x && rm -rf "$S"' 'rm -rf "$S"' 'S=~/.cache/x; rm -rf "$S/.."' 'd=$(mktemp -d); d=~; rm -rf "$d"'
+  'export T=~; rm -rf "$T"' 'declare -n T=HOME; rm -rf "$T"' 'local -n T=HOME; rm -rf "$T"' 'typeset -n T=HOME; rm -rf -- "$T"'
+  'declare -rn T=HOME; rm -rf "$T"' 'export T=$(mktemp -d); T=~; rm -rf "$T"'
   '(S=~/.cache/x); rm -rf "$S"' $'if [ -n x ]; then\nS=~/.cache/x\nrm -rf "$S"\nfi'
   "$(printf 'echo x;%.0s' {1..120}) rm -rf \"\$HOME\"")
 allowed=('rm -rf ./build' 'rm -rf node_modules' 'd=$(mktemp -d); rm -rf -- "$d/x"' 'rm -rf ~/.cache/foo/bar' 'rm -f ~/.bashrc.bak'
@@ -48,6 +50,8 @@ allowed=('rm -rf ./build' 'rm -rf node_modules' 'd=$(mktemp -d); rm -rf -- "$d/x
   'd=$(mktemp -d -p /tmp/x 2>/dev/null || mktemp -d); rm -rf -- "$d"' 'd=$(mktemp -d || mktemp -d); rm -rf -- "$d"'
   'd=$(mktemp -d -p /tmp/x 2>/dev/null); rm -rf -- "$d"' 'd="$(mktemp -d -p /tmp/x || mktemp -d)"; rm -rf "$d"'
   $'d=$(mktemp -d -p /tmp/x 2>/dev/null || mktemp -d)\ncd "$d" && make\nrm -rf -- "$d"'
+  'export T=$(mktemp -d); rm -rf -- "$T"' 'local -r d=$(mktemp -d); rm -rf "$d"' 'declare -x T=~/.cache/x; rm -rf "$T"'
+  $'export T=$(mktemp -d --tmpdir=/dev/shm lfm-wt-XXXXXX); export LFM_HOME=$T/home PROJ=$T/proj; mkdir -p $LFM_HOME $PROJ; git init -q $PROJ; node bin/learn-from-mistakes-axi.mjs init --no-skill --dir $PROJ --agent claude --model m --judge-agent codex --judge-model m2 >/tmp/init-out.txt 2>&1; echo "exit=$?"; awk \'{ if (length($0)>100) print FILENAME" "FNR" ("length($0)"): "$0 }\' $LFM_HOME/config.yaml $PROJ/.learn-from-mistakes.yaml; echo "CONFIG-CHECK-DONE"; cat /tmp/init-out.txt; echo "---json---"; node bin/learn-from-mistakes-axi.mjs init --json --dir $PROJ 2>&1 | head -5; rm -rf -- "$T"'
   $'d=$(mktemp -d); REPO=/repo; CLI=$REPO/bin/cli.mjs; FAKE=$REPO/test/fake-agent/claude\nmkdir -p "$d/fakes" "$d/home" "$d/p"\nln -s "$FAKE" "$d/fakes/claude"; ln -s "$FAKE" "$d/fakes/codex"\nprintf \'agent: claude\\njudge_agent: codex\\n\' > "$d/home/config.yaml"\ncp "$REPO/examples/defects.md" "$d/p/"\nprintf \'\\n## %s\\n\\n- [tests] Umer tests failed: UMER_FIXTURES was unset.\\n- [tests] They failed again for the same reason.\\n\' "$(date -Is)" >> "$d/p/defects.md"\nHOME="$d/home" node "$CLI" retro --project "$d/p" || true\nrm -rf -- "$d"')
 n=0
 for c in "${blocked[@]}"; do n=$((n + 1)); if hookrun "/tmp/case-$n" "$c"; then no "MISSED: $c"; fi; done
