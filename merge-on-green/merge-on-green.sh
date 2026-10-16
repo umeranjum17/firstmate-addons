@@ -9,11 +9,13 @@
 #   1. FM_HOME=<home> fm-checks-lint.sh <PR URL> <home>/data/<task> - require a PASS in its output.
 #   2. state/<task>.run-receipt.json - require verdict PASS, head == pr_head, spawn_gen == the meta's spawn_gen.
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
-# Any refusal or FAIL: no retry in the same cycle; one wake line naming the task, the PR URL and the first
-# refusal reason, so the lead acts. A merge: one wake line with the verified merged URL, so the lead does the
-# post-merge steps (install from main, teardown).
-# One merge attempt per task per head: the attempted head is remembered in this add-on's own data dir
-# (<home>/data/fm-merge-on-green/<task>.head), never in state/. Nothing is printed when nothing happened.
+# Any refusal or FAIL: one wake line naming the task, the PR URL and the first refusal reason, so the lead
+# acts; the refusal is remembered per task+head+reason+receipt state and repeats stay silent until pr_head,
+# the run receipt or the reason changes. A merge: one wake line with the verified merged URL, so the lead
+# does the post-merge steps (install from main, teardown).
+# One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
+# add-on's own data dir (<home>/data/fm-merge-on-green/<task>.head, <task>.refused), never in state/.
+# Nothing is printed when nothing happened.
 # Every command is bounded with timeout, so the check finishes well within FM_CHECK_TIMEOUT.
 set -u
 [ "$#" -eq 2 ] && [ "$1" = check ] && [ -d "$2/state" ] || { echo "usage: merge-on-green.sh check <fm-home>" >&2; exit 2; }
@@ -21,6 +23,7 @@ FMH=$(cd "$2" && pwd -P)
 STATE=$FMH/state
 LINT=${FM_MOG_CHECKS_LINT:-/home/umer/firstmate/config/fm-checks-lint.sh}
 DATA=$FMH/data/fm-merge-on-green
+umask 077
 # One third of the watcher's per-check bound per command (floor 5s), and the whole check stops
 # at 80% of it: the watcher kills at FM_CHECK_TIMEOUT and a check killed mid-merge helps nobody.
 BUDGET=$(( ${FM_CHECK_TIMEOUT:-30} / 3 )); [ "$BUDGET" -ge 5 ] || BUDGET=5
@@ -41,6 +44,14 @@ first_reason() { # first non-empty line of a command's output, trimmed to keep t
   [ -n "$r" ] || r="exit code ${2:-?} with no output"
   [ "${#r}" -le 140 ] || r=${r:0:137}'...'
   printf '%s' "$r"
+}
+
+refuse() { # <reason> <receipt-stamp>: the wake line prints once per task+head+reason+receipt state,
+  # remembered like the merge path in <task>.refused; silent while all three hold.
+  [ "$(cat "$DATA/$task.refused" 2>/dev/null)" = "$(printf '%s\n%s\n%s\n' "$pr_head" "$1" "$2")" ] && return 0
+  echo "merge-on-green: NOT merging $task $pr: $1"
+  mkdir -p "$DATA" 2>/dev/null
+  printf '%s\n%s\n%s\n' "$pr_head" "$1" "$2" > "$DATA/$task.refused" 2>/dev/null || :
 }
 
 for m in "$STATE"/*.meta; do
@@ -65,37 +76,38 @@ for m in "$STATE"/*.meta; do
   # 1. The evidence gate, run as its own command, must print PASS.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
   if [ "$lint_rc" -ne 0 ] || ! printf '%s\n' "$lint_out" | grep -q 'PASS'; then
-    echo "merge-on-green: NOT merging $task $pr: checks lint refused: $(first_reason "$lint_out" "$lint_rc")"
+    refuse "checks lint refused: $(first_reason "$lint_out" "$lint_rc")" ''
     continue
   fi
 
   # 2. The completion receipt must be a PASS for exactly this head and spawn generation.
   rcpt=$STATE/$task.run-receipt.json
   if [ ! -f "$rcpt" ]; then
-    echo "merge-on-green: NOT merging $task $pr: no run receipt at state/$task.run-receipt.json"
+    refuse "no run receipt at state/$task.run-receipt.json" ''
     continue
   fi
   if ! command -v jq >/dev/null 2>&1; then
-    echo "merge-on-green: NOT merging $task $pr: jq is unavailable, cannot read the run receipt"
+    refuse "jq is unavailable, cannot read the run receipt" ''
     continue
   fi
+  rstamp=$(cksum < "$rcpt" 2>/dev/null)
   verdict=$(timeout "$BUDGET" jq -r '.verdict // ""' "$rcpt" 2>/dev/null); jq_rc=$?
   rhead=$(timeout "$BUDGET" jq -r '.head // ""' "$rcpt" 2>/dev/null)
   rgen=$(timeout "$BUDGET" jq -r '.spawn_gen // ""' "$rcpt" 2>/dev/null)
   if [ "$jq_rc" -ne 0 ] || [ -z "$verdict$rhead$rgen" ]; then
-    echo "merge-on-green: NOT merging $task $pr: run receipt is unreadable JSON"
+    refuse "run receipt is unreadable JSON" "$rstamp"
     continue
   fi
   if [ "$verdict" != PASS ]; then
-    echo "merge-on-green: NOT merging $task $pr: run receipt verdict is ${verdict:-empty}, not PASS"
+    refuse "run receipt verdict is ${verdict:-empty}, not PASS" "$rstamp"
     continue
   fi
   if [ "$rhead" != "$pr_head" ]; then
-    echo "merge-on-green: NOT merging $task $pr: run receipt head ${rhead:-empty} != meta pr_head"
+    refuse "run receipt head ${rhead:-empty} != meta pr_head" "$rstamp"
     continue
   fi
   if [ "$rgen" != "$gen" ]; then
-    echo "merge-on-green: NOT merging $task $pr: run receipt spawn_gen ${rgen:-empty} != meta spawn_gen"
+    refuse "run receipt spawn_gen ${rgen:-empty} != meta spawn_gen" "$rstamp"
     continue
   fi
 
@@ -105,7 +117,6 @@ for m in "$STATE"/*.meta; do
   # A merge killed by the watcher after the head was recorded burns it with no wake line:
   # start one only when it still fits inside the watcher's whole-check bound.
   [ $(( $(date +%s) + BUDGET + 1 )) -le $(( START + ${FM_CHECK_TIMEOUT:-30} )) ] || exit 0
-  umask 077
   mkdir -p "$DATA" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA"; continue; }
   printf '%s\n' "$pr_head" > "$DATA/$task.head" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA/$task.head"; continue; }
   merge_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$FMH/bin/fm-pr-merge.sh" "$task" "$pr" 2>&1); merge_rc=$?

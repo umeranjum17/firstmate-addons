@@ -122,6 +122,42 @@ check "i: no merge started" "$(wc -l < "$STUB_DIR/merge-calls")" 2
 check "i: head not recorded" "$([ -e "$FM/data/fm-merge-on-green/t8.head" ] && echo recorded || echo never)" never
 rm "$FM/state/t8.meta" "$FM/state/t8.run-receipt.json"
 
+# (j) a gate refusal wakes once per task+head+reason+receipt: repeats are silent, a changed reason,
+# receipt or head wakes again, and past refusals never block the merge itself.
+meta t9 on "$H1" s9
+printf '{\n  "verdict": "FAIL",\n  "head": "%s",\n  "spawn_gen": "s9"\n}\n' "$H1" > "$FM/state/t9.run-receipt.json"
+out=$(mog)
+check "j: verdict refusal wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
+has "j: verdict refusal reason" "$out" "run receipt verdict is FAIL, not PASS"
+check "j: repeat verdict refusal silent" "$(mog)" ""
+printf '{\n  "verdict": "FAIL",\n  "head": "%s",\n  "spawn_gen": "s9",\n  "note": "republished"\n}\n' "$H1" > "$FM/state/t9.run-receipt.json"
+check "j: republished receipt wakes again" "$(printf '%s\n' "$(mog)" | wc -l)" 1
+check "j: repeat republished silent" "$(mog)" ""
+printf '{\n  "verdict": "PENDING",\n  "head": "%s",\n  "spawn_gen": "s9"\n}\n' "$H1" > "$FM/state/t9.run-receipt.json"
+out=$(mog)
+check "j: changed reason wakes again" "$(printf '%s\n' "$out" | wc -l)" 1
+has "j: changed reason named" "$out" "run receipt verdict is PENDING, not PASS"
+check "j: repeat changed reason silent" "$(mog)" ""
+printf '{\n  "verdict": "PASS",\n  "head": "%s",\n  "spawn_gen": "s9"\n}\n' "$H1" > "$FM/state/t9.run-receipt.json"
+printf 'yolo=on\npr=https://github.com/ex/r/pull/9\npr_head=%s\nspawn_gen=s9\n' "$H2" > "$FM/state/t9.meta"
+out=$(mog)
+check "j: new head wakes again" "$(printf '%s\n' "$out" | wc -l)" 1
+has "j: new head reason" "$out" "run receipt head $H1 != meta pr_head"
+check "j: repeat new-head refusal silent" "$(mog)" ""
+touch "$STUB_DIR/lint-fail"
+out=$(mog)
+check "j: lint refusal wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
+has "j: lint refusal reason" "$out" "checks lint refused"
+check "j: repeat lint refusal silent" "$(mog)" ""
+rm "$STUB_DIR/lint-fail"
+meta t9 on "$H2" s9
+out=$(mog)
+check "j: gates pass after refusals -> merged" "$(printf '%s\n' "$out" | wc -l)" 1
+has "j: merged line" "$out" "merged t9 https://github.com/ex/r/pull/9"
+check "j: merge attempt recorded" "$(cat "$FM/data/fm-merge-on-green/t9.head")" "$H2"
+check "j: silent after merge" "$(mog)" ""
+rm "$FM/state/t9.meta" "$FM/state/t9.run-receipt.json"
+
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'
 #!/bin/sh
