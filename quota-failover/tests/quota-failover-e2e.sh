@@ -12,7 +12,8 @@
 # route move, and OpenCode Go and Codex workers only rest; with the file gone
 # a Claude worker only rests, once, and rests and wakes again when the same
 # account stops a new incarnation, while a pool rest that fails still wakes
-# the home, once. Needs bash, jq, flock, timeout, sed and stat
+# the home, once; a pool worker wedged with a clean screen still loses its
+# route to the pinned probe's verdict. Needs bash, jq, flock, timeout, sed and stat
 # on PATH; no real tool or home is touched.
 set -u
 
@@ -189,6 +190,20 @@ is "pass5: the same account rests again for the new incarnation" "$(cat "$pooll"
 rest c3"
 count "pass5: and the wake fires again for the new stop" "$wake" 'b1 stopped' 2
 count "pass5: the failed-rest wake stays at one line" "$wake" 'f1 stopped' 1
+
+# A pool worker wedged with a clean screen on the 429 route: only the
+# route-scoped pinned probe sees the outage, and it must still take the
+# route out of dispatch while the worker itself rests and wakes.
+printf 'endpoint_task_id=q1\nharness=opencode\nmodel=opencode-go/step-5-preview-free\nkind=crewmate\nspawn_gen=s0.q1\naccount=go9\n' \
+  >"$home/state/q1.meta"
+run
+
+is "pass6: the pinned probe takes the pool worker's route out" \
+  "$(jq -r '.[].model' "$dead" | paste -sd, -)" "opencode-go/step-5-preview-free"
+is "pass6: and the route leaves new dispatch" \
+  "$(grep -Eo 'step-5-preview-free' "$disp" 2>/dev/null | sort -u | paste -sd, -)" ""
+has "pass6: the worker itself still rests and wakes" "$wake" \
+  'q1 stopped on opencode opencode-go/step-5-preview-free account go9 .*bin/fm-control.sh q1 relaunch --account <id>$'
 
 if [ "$fails" -eq 0 ]; then
   echo "quota-failover e2e: all assertions held"

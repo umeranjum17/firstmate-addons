@@ -282,7 +282,7 @@ for meta in "$STATE"/*.meta; do
     why="its pinned route is already out of dispatch"
   elif err=$(pinned_out "$id" "$h" "$m") && [ -n "$err" ]; then
     why="its pinned route answered a provider error ($err)"
-    [ -n "$pool" ] || dead_mark_out "$h" "$m" || true
+    dead_mark_out "$h" "$m" || true
   else
     continue
   fi
