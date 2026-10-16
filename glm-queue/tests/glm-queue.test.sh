@@ -39,7 +39,7 @@ for _ in $(seq 50); do grep -q 'glm-queue on' "$T/queue.log" && curl -s "127.0.0
 fail=0 pids=()
 
 for i in $(seq 20); do
-  curl -s -H 'Authorization: Bearer test-key' -d "call-$i" "127.0.0.1:$QPORT/api/coding/paas/v4/chat/completions?x=$i" > "$T/out.$i" &
+  curl -s -m 10 -H 'Authorization: Bearer test-key' -d "call-$i" "127.0.0.1:$QPORT/api/coding/paas/v4/chat/completions?x=$i" > "$T/out.$i" &
   pids+=($!)
 done
 wait "${pids[@]}"
@@ -55,11 +55,14 @@ max=$(curl -s "127.0.0.1:$UPORT/max")
 
 # Time to the first chunk and to the end of the stream, in ms, as the client sees them.
 read -r first last < <(QPORT=$QPORT node -e '
-const t0 = Date.now(); let first = 0;
-require("http").get(`http://127.0.0.1:${process.env.QPORT}/stream`, (r) => {
-  r.on("data", () => { first ||= Date.now() - t0; });
-  r.on("end", () => console.log(first, Date.now() - t0));
-});')
+const t0 = Date.now(); let first = 0; let said = false; let timer; let r;
+const done = (a, b) => { if (said) return; said = true; clearTimeout(timer); if (r) r.destroy(); console.log(a, b); };
+r = require("http").get(`http://127.0.0.1:${process.env.QPORT}/stream`, (res) => {
+  res.on("data", () => { first ||= Date.now() - t0; });
+  res.on("end", () => done(first, Date.now() - t0));
+});
+r.on("error", () => done(9999, 0));
+timer = setTimeout(() => done(9999, 0), 3500);')
 [ "${first:-9999}" -lt 600 ] && [ "${last:-0}" -ge 800 ] && echo "PASS stream: first chunk at ${first} ms, end at ${last} ms" \
   || { echo "FAIL stream not streamed: first chunk at ${first:-never} ms, end at ${last:-never} ms"; fail=1; }
 
@@ -78,7 +81,7 @@ timer = setTimeout(() => done("hung"), 3500);')
 { [ "${verdict:-}" = aborted ] || [ "${verdict:-}" = error ]; } && [ "${ms:-99999}" -lt 3000 ] \
   && echo "PASS truncated body: client saw $verdict at ${ms} ms" \
   || { echo "FAIL truncated body: client saw ${verdict:-nothing} at ${ms:-never} ms"; fail=1; }
-[ "$(curl -s -H 'Authorization: Bearer test-key' -d after-truncated "127.0.0.1:$QPORT/api/coding/paas/v4/chat/completions?after")" \
+[ "$(curl -s -m 10 -H 'Authorization: Bearer test-key' -d after-truncated "127.0.0.1:$QPORT/api/coding/paas/v4/chat/completions?after")" \
   = "POST /api/coding/paas/v4/chat/completions?after Bearer test-key after-truncated" ] \
   && echo "PASS the call after the truncation completed (slot freed)" || { echo "FAIL slot wedged after truncation"; fail=1; }
 grep -q '^status=upstream-error .* in_flight=0 ' "$T/queue.log" && echo "PASS truncation logged with the slot drained" \
