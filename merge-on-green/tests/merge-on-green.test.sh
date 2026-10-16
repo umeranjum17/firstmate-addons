@@ -59,7 +59,7 @@ H1=1111111111111111111111111111111111111111 H2=222222222222222222222222222222222
 # (a) yolo=off: skipped even though the state is green, nothing is linted or merged.
 meta t1 off "$H1" s1
 check "a: yolo off -> silent" "$(mog)" ""
-check "a: nothing linted" "$(cat "$STUB_DIR/lint-calls" 2>/dev/null | wc -l)" 0
+check "a: nothing linted" "$(wc -l 2>/dev/null < "$STUB_DIR/lint-calls" || echo 0)" 0
 check "a: nothing merged" "$([ -e "$STUB_DIR/merge-calls" ] && echo called || echo never)" never
 
 # (b) lint FAIL: no merge, exactly one wake line naming task, PR URL and the refusal reason.
@@ -106,7 +106,7 @@ mkdir -p "$STUB_DIR/not-ready"
 meta t5 on "$H1" s5
 printf 'yolo=on\npr=https://github.com/ex/r/pull/6\n' > "$FM/state/t6.meta"
 touch "$STUB_DIR/not-ready/t5"
-before=$(cat "$STUB_DIR/lint-calls" 2>/dev/null | wc -l)
+before=$(wc -l 2>/dev/null < "$STUB_DIR/lint-calls" || echo 0)
 meta t7 on "$H1" s7
 mkdir -p "$STUB_DIR/merged"
 touch "$STUB_DIR/merged/t7"
@@ -114,7 +114,7 @@ check "f: already-merged PR -> silent" "$(mog)" ""
 check "f: already-merged PR not re-merged" "$([ -e "$FM/data/fm-merge-on-green/t7.head" ] && echo attempted || echo never)" never
 check "f: not-ready state -> silent" "$(mog)" ""
 check "f: no pr_head -> silent" "$(mog)" ""
-check "f: lint not consulted" "$(cat "$STUB_DIR/lint-calls" | wc -l)" "$before"
+check "f: lint not consulted" "$(wc -l 2>/dev/null < "$STUB_DIR/lint-calls" || echo 0)" "$before"
 
 # (i) FM_CHECK_TIMEOUT too small to fit a merge: nothing is started and the head is never recorded,
 # so the next sweep can retry instead of a watcher kill burning the recorded head silently.
