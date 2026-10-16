@@ -32,7 +32,7 @@ model/skill statistics and outcome-recording readers.
 A lane whose last status event is `paused`, `blocked` or `failed`, stamped `[at=]` more than 4 h ago, not waiting on the captain, and still read as that wait by `bin/fm-crew-state.sh`, keeps its worktree and record but stops counting toward the cap, so a ready item takes its slot.
 Validating and own busy work read as working there and keep counting; an unstamped wait, or a state that cannot be read within 15 s, keeps counting.
 Only those long-wait candidates are probed, in parallel.
-`--summary` appends `counted` (open lanes that count) and `dry` (1 when ready = 0 and counted < cap) to its row.
+`--summary` appends `counted` (open lanes that count) and `dry` (1 when ready = 0 and working < cap) to its row.
 `FM_MAIN_HOME` names Main's home (default `/home/umer/firstmate`).
 
 Moved from Main's `config/fm-flow-check.sh` (sha256 `6e353c9e...4ed2`) in the first commit, then changed.

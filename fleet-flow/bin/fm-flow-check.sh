@@ -9,7 +9,7 @@
 # Line order: land, over-cap, wait, red, split, budget, key, pull. Format: <task> <actor> <age> <next action>.
 # Lane = live state/<task>.meta with kind=ship|scout. Lane age starts at the birth of data/<task>/.
 # A lane in a long external wait (see FREE_AFTER) keeps its record but stops counting toward the cap:
-# counted = open lanes that count; dry = 1 when ready = 0 and counted < cap.
+# counted = open lanes that count; dry = 1 when ready = 0 and working < cap.
 # FM_MAIN_HOME names Main's home (default /home/umer/firstmate), where lane-caps, the status rollup and bin/ live.
 import os, re, sys, glob, json, time, subprocess, statistics as st
 
@@ -137,7 +137,7 @@ if mode == '--summary':
     lw = max([L['since'] for L in lanes if L['verb'] in ('working', 'resolved')] or [0])
     print('\t'.join(map(str, [name, open_n, working, ready_n, sum(L['verb'] == 'done' for L in lanes),
                               f'{max(waits) / 3600:.1f}' if waits else '0', (NOW - lw) // 60 if lw else -1,
-                              count_n, int(ready_n == 0 and count_n < CAP)])))
+                              count_n, int(ready_n == 0 and active_n < CAP)])))
     sys.exit(0)
 
 if mode == '--can-start':
