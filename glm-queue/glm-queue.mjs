@@ -43,12 +43,16 @@ http.createServer({ requestTimeout: 0 }, async (req, res) => {
     res.writeHead(upRes.statusCode, upRes.headers);
     upRes.pipe(res);
     upRes.on('end', () => finish(upRes.statusCode));
-    upRes.on('error', () => { res.end(); finish('upstream-error'); });
+    upRes.on('error', () => { if (!res.writableEnded) { res.end(); res.socket?.destroy(); } finish('upstream-error'); });
   });
   up.setTimeout(300_000, () => up.destroy(new Error('upstream idle timeout')));
   up.on('error', (e) => {
-    if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
-    res.end(`glm-queue: upstream ${UP.host} failed: ${e.message}\n`);
+    if (res.headersSent) {
+      if (!res.writableEnded) { res.end(); res.socket?.destroy(); }
+    } else {
+      res.writeHead(502, { 'content-type': 'text/plain' });
+      res.end(`glm-queue: upstream ${UP.host} failed: ${e.message}\n`);
+    }
     finish('upstream-error');
   });
   res.on('close', () => { if (!done) { up.destroy(); finish('client-gone'); } });
