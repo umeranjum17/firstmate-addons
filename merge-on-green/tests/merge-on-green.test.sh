@@ -51,19 +51,14 @@ if [ -f "$STUB_DIR/lint-fail" ]; then
   echo "checks-lint: FAIL: evidence: not proven: no verify skill ran"
   exit 1
 fi
+if [ -f "$STUB_DIR/lint-notproven" ]; then
+  echo "checks-lint: PASS: not-proven: no device"
+  exit 0
+fi
 echo "checks-lint: PASS: 2 evidence files"
 EOF
-cat > "$STUB_DIR/gh" <<'EOF'
-#!/usr/bin/env bash
-# stub: `gh pr view <url> --json body -q .body` prints $STUB_DIR/body/<number>, else a proven Checks block
-printf '%s\n' "$*" >> "$STUB_DIR/gh-calls"
-if [ -f "$STUB_DIR/gh-fail" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-n=${3##*/}
-if [ -f "$STUB_DIR/body/$n" ]; then cat "$STUB_DIR/body/$n"; else printf 'Summary\r\n\r\n## Checks\r\nevidence: /x/proof.txt\r\n'; fi
-EOF
-chmod +x "$FM/bin/fm-crew-state.sh" "$FM/bin/fm-pr-merge.sh" "$STUB_DIR/fm-checks-lint.sh" "$STUB_DIR/gh"
+chmod +x "$FM/bin/fm-crew-state.sh" "$FM/bin/fm-pr-merge.sh" "$STUB_DIR/fm-checks-lint.sh"
 export PATH=$STUB_DIR:$PATH
-mkdir -p "$STUB_DIR/body"; : > "$STUB_DIR/gh-calls"
 H1=1111111111111111111111111111111111111111 H2=2222222222222222222222222222222222222222
 
 # (a) yolo=off: skipped even though the state is green, nothing is linted or merged.
@@ -201,57 +196,28 @@ rm "$FM/state/t10.meta" "$FM/state/t10.run-receipt.json"
 # (l) merge=manual: skipped silently even though every gate would pass; nothing read, linted or merged.
 meta t11 on "$H1" s11
 echo merge=manual >> "$FM/state/t11.meta"
-lint_before=$(wc -l < "$STUB_DIR/lint-calls") gh_before=$(wc -l < "$STUB_DIR/gh-calls")
+lint_before=$(wc -l < "$STUB_DIR/lint-calls")
 check "l: merge=manual -> silent" "$(mog)" ""
 check "l: merge=manual not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
-check "l: merge=manual body not read" "$(wc -l < "$STUB_DIR/gh-calls")" "$gh_before"
 check "l: merge=manual not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
 check "l: merge=manual no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t11.head" ] && echo recorded || echo never)" never
 rm "$FM/state/t11.meta" "$FM/state/t11.run-receipt.json"
 
-# (m) a "## Checks" block saying "not proven" is judged by the evidence gate's own grammar: whatever
-# whitespace its heading uses, and only the newest block (workers append, never replace). The same
-# words in a stale block or outside a Checks block do not skip; an unreadable body refuses once.
+# (m) a not-proven PASS from the evidence gate (the gate reads the PR's newest "## Checks" block):
+# the task is skipped silently after the lint, before the receipt or merge, with no recorded
+# attempt, on the first sweep and every repeat; the same task merges once the gate returns a plain
+# PASS.
 meta t12 on "$H1" s12
-printf 'Summary\n\n## Checks\noutcome: x\nevidence: not proven: no device\n' > "$STUB_DIR/body/12"
-lint_before=$(wc -l < "$STUB_DIR/lint-calls")
+touch "$STUB_DIR/lint-notproven"
 check "m: not proven -> silent" "$(mog)" ""
-check "m: not proven not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
+check "m: repeat not proven silent" "$(mog)" ""
 check "m: not proven not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
 check "m: not proven no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t12.head" ] && echo recorded || echo never)" never
-printf '##Checks\nevidence: not proven: none captured\n' > "$STUB_DIR/body/12"
-check "m: tight heading still skips" "$(mog)" ""
-check "m: tight heading not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
-check "m: tight heading not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
-touch "$STUB_DIR/gh-fail"
+rm "$STUB_DIR/lint-notproven"
 out=$(mog)
-check "m: unreadable body wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
-has "m: unreadable body reason" "$out" "cannot read the PR body: HTTP 502: Bad Gateway"
-check "m: repeat unreadable body silent" "$(mog)" ""
-rm "$STUB_DIR/gh-fail"
-printf '## Checks\nevidence: not proven: no device\n\n## Checks\nevidence: /x/proof.txt\n\n## Notes\nthe old flow was not proven\n' > "$STUB_DIR/body/12"
-out=$(mog)
-has "m: newest proven block merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
+has "m: plain PASS merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
 check "m: merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 7
 rm "$FM/state/t12.meta" "$FM/state/t12.run-receipt.json"
-# a bare '##' line also ends the newest block, like the evidence gate's own lookahead
-meta t13 on "$H1" s13
-printf '## Checks\nevidence: /x/proof.txt\n##\nnot proven: legacy note\n' > "$STUB_DIR/body/13"
-out=$(mog)
-has "m: bare ## ends the Checks block" "$out" "merged t13 https://github.com/ex/r/pull/13"
-check "m: bare ## merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 8
-rm "$FM/state/t13.meta" "$FM/state/t13.run-receipt.json"
-# the gate's not-proven rule is exact: an evidence line starting with "not proven:" (its spacing
-# tolerated) skips; the phrase in prose or a non-evidence line does not
-meta t14 on "$H1" s14
-printf '## Checks\nevidence : not proven: none captured\n' > "$STUB_DIR/body/14"
-check "m: loose spacing still skips" "$(mog)" ""
-check "m: loose spacing not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 8
-printf '## Checks\nevidence: /x/proof.txt\nnotes: first attempt was not proven before the retry\n' > "$STUB_DIR/body/14"
-out=$(mog)
-has "m: prose mention still merges" "$out" "merged t14 https://github.com/ex/r/pull/14"
-check "m: prose mention merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 9
-rm "$FM/state/t14.meta" "$FM/state/t14.run-receipt.json"
 
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'

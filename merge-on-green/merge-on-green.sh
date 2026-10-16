@@ -5,8 +5,9 @@
 #
 # Per home, for each state/<task>.meta with yolo=on and a recorded pr= and pr_head=, it acts only when the
 # task's resolved state (bin/fm-crew-state.sh <task>) says checks green / PR ready. It silently skips a task
-# marked merge=manual and a PR whose "## Checks" block says "not proven" (the lead files the proof gap
-# first). Then, in this order and as separate sequential commands, never piped and never in parallel:
+# marked merge=manual and a PR whose evidence-gate PASS is a not-proven PASS (the gate reads the PR's
+# newest "## Checks" block; the lead files the proof gap first). Then, in this order and as separate
+# sequential commands, never piped and never in parallel:
 #   1. FM_HOME=<home> fm-checks-lint.sh <PR URL> <home>/data/<task> - require a PASS in its output.
 #   2. state/<task>.run-receipt.json - require verdict PASS, head == pr_head, spawn_gen == the meta's spawn_gen.
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
@@ -85,21 +86,8 @@ for m in "$STATE"/*.meta; do
     *) continue ;;
   esac
 
-  # A "## Checks" block that says "not proven" is the lead's proof gap to file first: skip silently.
-  body=$(timeout "$BUDGET" gh pr view "$pr" --json body -q .body 2>&1); body_rc=$?
-  if timed_out "$body_rc"; then
-    refuse "reading the PR body timed out after ${BUDGET}s; retrying next sweep" ''
-    continue
-  fi
-  if [ "$body_rc" -ne 0 ]; then
-    refuse "cannot read the PR body: $(first_reason "$body" "$body_rc")" ''
-    continue
-  fi
-  printf '%s\n' "$body" | tr -d '\r' \
-    | awk '/^##[[:space:]]*Checks[[:space:]]*$/ {f=1; buf=""; next} /^##([[:space:]]|$)/ {f=0; next} f {buf = buf $0 "\n"} END {printf "%s", buf}' \
-    | grep -qiE '^[[:space:]]*evidence[[:space:]]*:[[:space:]]*not proven[[:space:]]*:[[:space:]]*[^[:space:]]' && continue
-
-  # 1. The evidence gate, run as its own command, must print PASS.
+  # 1. The evidence gate, run as its own command, must print PASS; a not-proven PASS is the lead's
+  # proof gap to file first: skip silently before the receipt or merge.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
   if timed_out "$lint_rc"; then
     refuse "checks lint timed out after ${BUDGET}s, no verdict; retrying next sweep" ''
@@ -109,6 +97,7 @@ for m in "$STATE"/*.meta; do
     refuse "checks lint refused: $(first_reason "$lint_out" "$lint_rc")" ''
     continue
   fi
+  printf '%s\n' "$lint_out" | grep -q 'checks-lint: PASS: not-proven:' && continue
 
   # 2. The completion receipt must be a PASS for exactly this head and spawn generation.
   rcpt=$STATE/$task.run-receipt.json

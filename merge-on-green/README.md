@@ -8,7 +8,8 @@ lead to notice and merge (about 21 minutes per change).
 when the task's resolved state (`bin/fm-crew-state.sh <task>`) says checks green / PR ready. It
 silently skips a task whose meta says `merge=manual` (the lead sets it at intake on destructive,
 irreversible or security-sensitive work, and on work waiting for the captain's own review), and a PR
-whose `## Checks` block says "not proven" (filing the proof gap stays with the lead). Then it runs, in this order and as separate sequential commands, never piped and never in parallel:
+whose evidence-gate PASS is a not-proven PASS — `fm-checks-lint.sh` reads the PR's newest `## Checks`
+block itself (filing the proof gap stays with the lead). Then it runs, in this order and as separate sequential commands, never piped and never in parallel:
 
 1. `FM_HOME=<home> /home/umer/firstmate/config/fm-checks-lint.sh <PR URL> <home>/data/<task>` —
    the evidence gate must print PASS.
@@ -47,8 +48,9 @@ installs it from merged main, never from a branch.
 
 `merge-on-green/tests/merge-on-green.test.sh` drives the check end to end against a fixture home
 with a stub `fm-crew-state.sh` and `fm-pr-merge.sh` in the home's `bin/` and a stub
-`fm-checks-lint.sh` behind `FM_MOG_CHECKS_LINT`, plus a stub `gh` on `PATH`. It covers: `yolo=off`,
-`merge=manual` and a "not proven" Checks block skipped with nothing linted or merged, lint FAIL -> no
+`fm-checks-lint.sh` behind `FM_MOG_CHECKS_LINT`. It covers: `yolo=off`, `merge=manual` skipped with
+nothing linted or merged, a "not proven" gate PASS skipping the task silently before the receipt or
+merge and merging once the gate returns a plain PASS, lint FAIL -> no
 merge and one wake line, receipt head mismatch -> no merge, all gates pass -> `fm-pr-merge` called
 once with exactly the task and PR URL and the merged line written, the same head never retried after a merge or a refusal, a
 gate refusal waking once per task+head+reason+receipt state with repeats silent and a changed
