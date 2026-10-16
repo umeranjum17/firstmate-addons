@@ -304,6 +304,7 @@ for meta in "$STATE"/*.meta; do
       fi
       note "$id" "account move off $acct failed, trying a route move: $(grep -m1 '^error: ' <<<"$out" || tail -n 1 <<<"$out")"
     else
+      [ "$(fm_meta_get "$meta" spawn_gen)" = "$gen" ] || continue
       hand='<id|next>'
       auto_move "$h" "$m" || hand='<id>'
       text="stopped on $route account $acct ($why, gen $gen); account rested, move it by hand: bin/fm-control.sh $id relaunch --account $hand"
