@@ -308,7 +308,7 @@ for meta in "$STATE"/*.meta; do
       hand='<id|next>'
       auto_move "$h" "$m" || hand='<id>'
       text="stopped on $route account $acct ($why, gen $gen); account rested, move it by hand: bin/fm-control.sh $id relaunch --account $hand"
-      [ "$(last "$id")" != "$text" ] || continue
+      case $(last "$id") in *"account $acct ("*"gen $gen); account rested"*) continue ;; esac
       if out=$(fm_account_pool_rest "${pool%%$'\t'*}" "${pool#*$'\t'}" "$acct" 2>&1); then
         log "$id: $text"
         printf 'quota-failover: %s %s\n' "$id" "$text" >>"$WAKE"

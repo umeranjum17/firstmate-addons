@@ -205,6 +205,15 @@ is "pass6: and the route leaves new dispatch" \
 has "pass6: the worker itself still rests and wakes" "$wake" \
   'q1 stopped on opencode opencode-go/step-5-preview-free account go9 .*bin/fm-control.sh q1 relaunch --account <id>$'
 
+# The next pass sees q1's route as already out of dispatch instead of
+# probe-detected, but the stop is the same one: nothing rests or wakes again.
+run
+
+count "pass7: the stop's changed label re-fires nothing" "$wake" 'q1 stopped' 1
+is "pass7: and the out route is not rested a second time" "$(cat "$pooll")" "rest c3
+rest c3
+rest go9"
+
 if [ "$fails" -eq 0 ]; then
   echo "quota-failover e2e: all assertions held"
 else
