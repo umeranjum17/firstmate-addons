@@ -209,8 +209,9 @@ check "l: merge=manual not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
 check "l: merge=manual no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t11.head" ] && echo recorded || echo never)" never
 rm "$FM/state/t11.meta" "$FM/state/t11.run-receipt.json"
 
-# (m) a "## Checks" block saying "not proven": skipped silently, no lint, no merge; the same words
-# outside the Checks block do not skip; an unreadable body refuses once.
+# (m) a "## Checks" block saying "not proven" is judged by the evidence gate's own grammar: whatever
+# whitespace its heading uses, and only the newest block (workers append, never replace). The same
+# words in a stale block or outside a Checks block do not skip; an unreadable body refuses once.
 meta t12 on "$H1" s12
 printf 'Summary\n\n## Checks\noutcome: x\nevidence: not proven: no device\n' > "$STUB_DIR/body/12"
 lint_before=$(wc -l < "$STUB_DIR/lint-calls")
@@ -218,15 +219,19 @@ check "m: not proven -> silent" "$(mog)" ""
 check "m: not proven not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
 check "m: not proven not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
 check "m: not proven no attempt recorded" "$([ -e "$FM/data/fm-merge-on-green/t12.head" ] && echo recorded || echo never)" never
+printf '##Checks\nevidence: not proven: none captured\n' > "$STUB_DIR/body/12"
+check "m: tight heading still skips" "$(mog)" ""
+check "m: tight heading not linted" "$(wc -l < "$STUB_DIR/lint-calls")" "$lint_before"
+check "m: tight heading not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 6
 touch "$STUB_DIR/gh-fail"
 out=$(mog)
 check "m: unreadable body wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
 has "m: unreadable body reason" "$out" "cannot read the PR body: HTTP 502: Bad Gateway"
 check "m: repeat unreadable body silent" "$(mog)" ""
 rm "$STUB_DIR/gh-fail"
-printf '## Checks\nevidence: /x/proof.txt\n\n## Notes\nthe old flow was not proven\n' > "$STUB_DIR/body/12"
+printf '## Checks\nevidence: not proven: no device\n\n## Checks\nevidence: /x/proof.txt\n\n## Notes\nthe old flow was not proven\n' > "$STUB_DIR/body/12"
 out=$(mog)
-has "m: not proven outside Checks still merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
+has "m: newest proven block merges" "$out" "merged t12 https://github.com/ex/r/pull/12"
 check "m: merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 7
 rm "$FM/state/t12.meta" "$FM/state/t12.run-receipt.json"
 

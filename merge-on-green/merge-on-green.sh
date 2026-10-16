@@ -95,7 +95,8 @@ for m in "$STATE"/*.meta; do
     refuse "cannot read the PR body: $(first_reason "$body" "$body_rc")" ''
     continue
   fi
-  printf '%s\n' "$body" | tr -d '\r' | awk '/^## Checks[[:space:]]*$/ {f=1; next} /^## / {f=0} f' \
+  printf '%s\n' "$body" | tr -d '\r' \
+    | awk '/^##[[:space:]]*Checks[[:space:]]*$/ {f=1; buf=""; next} /^##[[:space:]]/ {f=0; next} f {buf = buf $0 "\n"} END {printf "%s", buf}' \
     | grep -qi 'not proven' && continue
 
   # 1. The evidence gate, run as its own command, must print PASS.
