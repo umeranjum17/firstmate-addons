@@ -241,6 +241,17 @@ out=$(mog)
 has "m: bare ## ends the Checks block" "$out" "merged t13 https://github.com/ex/r/pull/13"
 check "m: bare ## merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 8
 rm "$FM/state/t13.meta" "$FM/state/t13.run-receipt.json"
+# the gate's not-proven rule is exact: an evidence line starting with "not proven:" (its spacing
+# tolerated) skips; the phrase in prose or a non-evidence line does not
+meta t14 on "$H1" s14
+printf '## Checks\nevidence : not proven: none captured\n' > "$STUB_DIR/body/14"
+check "m: loose spacing still skips" "$(mog)" ""
+check "m: loose spacing not merged" "$(wc -l < "$STUB_DIR/merge-calls")" 8
+printf '## Checks\nevidence: /x/proof.txt\nnotes: first attempt was not proven before the retry\n' > "$STUB_DIR/body/14"
+out=$(mog)
+has "m: prose mention still merges" "$out" "merged t14 https://github.com/ex/r/pull/14"
+check "m: prose mention merged once" "$(wc -l < "$STUB_DIR/merge-calls")" 9
+rm "$FM/state/t14.meta" "$FM/state/t14.run-receipt.json"
 
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'

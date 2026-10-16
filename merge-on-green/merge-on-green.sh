@@ -97,7 +97,7 @@ for m in "$STATE"/*.meta; do
   fi
   printf '%s\n' "$body" | tr -d '\r' \
     | awk '/^##[[:space:]]*Checks[[:space:]]*$/ {f=1; buf=""; next} /^##([[:space:]]|$)/ {f=0; next} f {buf = buf $0 "\n"} END {printf "%s", buf}' \
-    | grep -qi 'not proven' && continue
+    | grep -qiE '^[[:space:]]*evidence[[:space:]]*:[[:space:]]*not proven[[:space:]]*:[[:space:]]*[^[:space:]]' && continue
 
   # 1. The evidence gate, run as its own command, must print PASS.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
