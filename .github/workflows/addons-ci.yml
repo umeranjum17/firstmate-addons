@@ -82,4 +82,8 @@ jobs:
         run: bash host-memory/tests/fm-mem-gate.test.sh
       # Fixture home and config, stub quota-axi and pi: nothing real is touched.
       - name: Route change test
-        run: bash route-change/tests/route-change-e2e.sh
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-yaml
+          bash route-change/tests/route-change-e2e.sh
