@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # quota-failover e2e: the real script against a fixture home (one stub lib
-# symlinked under the four names it sources, stub quota-axi and opencode on
+# symlinked under the five names it sources, stub quota-axi and opencode on
 # PATH). The fixture is the 15 Oct ~21:55Z step-5-preview-free incident: a
 # lead whose pinned route answers its one-line test with a 429, and a worker
 # whose screen shows a limit on a second dead route. One pass must move both
 # to the live candidate, pass the dead routes over, and drop them from
 # crew-dispatch.json; a second pass with the routes answering again must
-# restore them and move nothing. Passes 3 and 4 add workers on pool
+# restore them and move nothing. Passes 3 to 7 add workers on pool
 # accounts: with config/account-pool-autorelaunch present a Claude worker
 # moves to the next account, a Claude worker with no next account takes the
 # route move, and OpenCode Go and Codex workers only rest; with the file gone

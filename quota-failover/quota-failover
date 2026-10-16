@@ -32,7 +32,8 @@
 # hand edits survive while it is out.
 # A stopped task on a pool account (account= in its meta and a usable
 # config/account-pool) hit that account's limit, so its route stays in
-# dispatch. While config/account-pool-autorelaunch exists (content ignored)
+# dispatch (a route-scoped probe verdict still takes it out). While
+# config/account-pool-autorelaunch exists (content ignored)
 # and the task's tool may change accounts automatically, it first moves
 # through bin/fm-control.sh relaunch --account next, which rests the account;
 # only when that fails does the route move above run. Otherwise the account
