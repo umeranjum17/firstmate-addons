@@ -114,6 +114,14 @@ check "f: not-ready state -> silent" "$(mog)" ""
 check "f: no pr_head -> silent" "$(mog)" ""
 check "f: lint not consulted" "$(cat "$STUB_DIR/lint-calls" | wc -l)" "$before"
 
+# (i) FM_CHECK_TIMEOUT too small to fit a merge: nothing is started and the head is never recorded,
+# so the next sweep can retry instead of a watcher kill burning the recorded head silently.
+meta t8 on "$H1" s8
+check "i: too-small bound -> silent" "$(FM_CHECK_TIMEOUT=4 "$SRC/merge-on-green.sh" check "$FM" 2>&1)" ""
+check "i: no merge started" "$(wc -l < "$STUB_DIR/merge-calls")" 2
+check "i: head not recorded" "$([ -e "$FM/data/fm-merge-on-green/t8.head" ] && echo recorded || echo never)" never
+rm "$FM/state/t8.meta" "$FM/state/t8.run-receipt.json"
+
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'
 #!/bin/sh

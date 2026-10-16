@@ -24,7 +24,8 @@ DATA=$FMH/data/fm-merge-on-green
 # One third of the watcher's per-check bound per command (floor 5s), and the whole check stops
 # at 80% of it: the watcher kills at FM_CHECK_TIMEOUT and a check killed mid-merge helps nobody.
 BUDGET=$(( ${FM_CHECK_TIMEOUT:-30} / 3 )); [ "$BUDGET" -ge 5 ] || BUDGET=5
-DEADLINE=$(( $(date +%s) + ${FM_CHECK_TIMEOUT:-30} * 4 / 5 ))
+START=$(date +%s)
+DEADLINE=$(( START + ${FM_CHECK_TIMEOUT:-30} * 4 / 5 ))
 
 meta_get() { # <meta-file> <key> -> last value, the same rule fm_meta_get applies
   local line value=''
@@ -101,6 +102,9 @@ for m in "$STATE"/*.meta; do
   # 3. Merge through fm-pr-merge.sh only: its own live green check, head pin and refusal rules stay in
   # charge, no --auto is ever passed. The attempted head is recorded first, so a check killed between
   # record and merge cannot retry the same head next sweep.
+  # A merge killed by the watcher after the head was recorded burns it with no wake line:
+  # start one only when it still fits inside the watcher's whole-check bound.
+  [ $(( $(date +%s) + BUDGET + 1 )) -le $(( START + ${FM_CHECK_TIMEOUT:-30} )) ] || exit 0
   umask 077
   mkdir -p "$DATA" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA"; continue; }
   printf '%s\n' "$pr_head" > "$DATA/$task.head" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA/$task.head"; continue; }
