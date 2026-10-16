@@ -100,7 +100,7 @@ FREE_AFTER = 4 * 3600
 def crew_state(t):
     try:
         return subprocess.Popen([f'{MAIN}/bin/fm-crew-state.sh', t], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                text=True, env={**os.environ, 'FM_HOME': home, 'FM_CREW_STATE_NO_FORGE': '1'})
+                                text=True, errors='replace', env={**os.environ, 'FM_HOME': home, 'FM_CREW_STATE_NO_FORGE': '1'})
     except OSError:
         return None
 
