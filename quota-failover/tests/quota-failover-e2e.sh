@@ -51,7 +51,7 @@ fm_quota_json_valid() { jq -e '.schemaVersion == 5 and (.providers | type) == "a
 fm_quota_single_provider_for_harness() { return 1; }
 fm_parent_channel_report() { printf '%s\n' "$3" >>"$1/state/parent-channel.log"; }
 fm_account_pool_config() { [ ! -f "$1/account-pool" ] || printf 'byokit-accounts\t/pool\n'; }
-fm_account_pool_rest() { [ "$3" = deadpool ] && { echo pool lib broken >&2; return 1; }; printf 'rest %s\n' "$3" >>"$FM_HOME/state/pool.log"; }
+fm_account_pool_rest() { [ "$3" = deadpool ] && { echo "pool lib broken at $(date +%s%N)" >&2; return 1; }; printf 'rest %s\n' "$3" >>"$FM_HOME/state/pool.log"; }
 #--- home/bin/fm-crew-state.sh
 #!/usr/bin/env bash
 echo 'state: working · source: fixture'
@@ -175,7 +175,7 @@ is "pass4: the account rested once" "$(cat "$pooll")" "rest c3"
 has "pass4: one log line names the account and the manual command" "$log" \
   'b1: stopped on claude claude-opus-4-8 account c3 .*bin/fm-control.sh b1 relaunch --account <id|next>$'
 has "pass4: a failed rest is logged with the pool's error" "$log" \
-  'f1: stopped on claude claude-opus-4-8 account deadpool .*rest failed (pool lib broken), move it by hand'
+  'f1: stopped on claude claude-opus-4-8 account deadpool .*rest failed (pool lib broken at [0-9]*), move it by hand'
 has "pass4: a failed rest still wakes the home with the account named" "$wake" \
   'f1 stopped on claude claude-opus-4-8 account deadpool .*bin/fm-control.sh f1 relaunch --account <id|next>$'
 count "pass4: one wake line per stopped worker" "$wake" '' 2

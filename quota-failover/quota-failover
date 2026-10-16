@@ -315,7 +315,9 @@ for meta in "$STATE"/*.meta; do
       else
         errline=${out%%$'\n'*}
         ftext="stopped on $route account $acct ($why, gen $gen); rest failed ($errline), move it by hand: bin/fm-control.sh $id relaunch --account $hand"
-        [ "$(last "$id")" = "$ftext" ] || { log "$id: $ftext"; printf 'quota-failover: %s %s\n' "$id" "$ftext" >>"$WAKE"; }
+        case $(last "$id") in *"account $acct ("*"gen $gen); rest failed ("*) continue ;; esac
+        log "$id: $ftext"
+        printf 'quota-failover: %s %s\n' "$id" "$ftext" >>"$WAKE"
       fi
       continue
     fi
