@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # route-change e2e: the real script against a fixture home and no-mistakes
 # config, with the real pipeline-quota-failover wrapper as the route list and
-# stub quota-axi and pi on PATH. Journeys: an unknown route and a route
-# quota-axi reads exhausted are refused with nothing written; a dry run writes
+# stub quota-axi and pi on PATH. Journeys: an unknown route, a route quota-axi
+# reads exhausted, a route quota-failover holds out, and an unusable quota-axi
+# reading are refused with nothing written; a dry run writes
 # nothing; a good route moves every dispatch list, the gate and the non-Claude
 # lead pins and keeps a backup of each; a route whose real request fails
 # restores every file. Needs bash, jq, flock, timeout and python3 with yaml;
@@ -56,7 +57,7 @@ claude claude-opus-5-5 high
 pi zai/glm-5.3-flash high
 #--- nm.yaml
 # no-mistakes config
-agent: opencode
+agent: opencode # 14 Oct captain: pipeline and reviews on free/cheap models only, never Claude
 api_key: SECRET-never-printed
 agent_config:
   claude:
@@ -64,7 +65,7 @@ agent_config:
     effort: low
   pi:
     # the gate model
-    model: zai/glm-5.3-flash
+    model: zai/glm-5.3-flash # 16 Oct 08:05Z captain on the board
     effort: medium
   opencode:
     model: opencode-go/muse-spark-1.3-contributor
@@ -122,6 +123,20 @@ is "refusals change no file" "$(snap)" "$first"
 is "refusals keep no backup" "$(baks)" 0
 is "refusals send no request" "$(wc -l <"$STUB_LOG")" 0
 
+# A route quota-failover holds out of dispatch, stored provider-prefixed as
+# the fleet writes opencode profiles: refused. The deepseek entry then left in
+# the file stays a different account, so the later commandcode deepseek
+# journeys still run.
+jq -n '[{when: "tough", profile: {harness: "opencode",
+  model: "opencode-go/muse-spark-1.3-contributor", provider: "opencode-go"}}]' >"$home/state/quota-failover-dead.json"
+out=$("$rc_bin" "$home" muse-spark-1.3-contributor 2>&1)
+is "dead-file route exits non-zero" "$?" 1
+has "dead-file route is refused" "$out" "refused: quota-failover holds muse-spark-1.3-contributor out of dispatch"
+is "the dead-file refusal changes no file" "$(snap)" "$first"
+is "the dead-file refusal sends no request" "$(wc -l <"$STUB_LOG")" 0
+jq -n '[{when: null, profile: {harness: "opencode",
+  model: "opencode-go/deepseek-v4.1-flash", provider: "opencode-go"}}]' >"$home/state/quota-failover-dead.json"
+
 # Dry run: the plan, nothing written.
 out=$("$rc_bin" --dry-run "$home" muse-spark-1.3-contributor 2>&1)
 is "dry run exits 0" "$?" 0
@@ -147,6 +162,9 @@ is "gate keys move" "$(python3 -c 'import yaml,sys; c=yaml.safe_load(open(sys.ar
   "pi muse-spark-1.3-contributor"
 is "gate: every other key and comment is unchanged" \
   "$(diff "$NM_CONFIG" "$NM_CONFIG".bak-route-change-* | grep -c '^[<>]')" 4
+is "the agent line keeps its provenance comment" "$(grep -cF 'agent: pi # 14 Oct captain' "$NM_CONFIG")" 1
+is "the model line keeps its provenance comment" \
+  "$(grep -cF 'model: muse-spark-1.3-contributor # 16 Oct 08:05Z captain on the board' "$NM_CONFIG")" 1
 is "global lead pin" "$(tail -n 1 "$home/config/secondmate-harness")" "pi muse-spark-1.3-contributor high"
 is "Claude lead pin stays" "$(cat "$home/config/secondmates/lead-claude/harness")" "claude claude-opus-5-5 high"
 is "route lead pin" "$(cat "$home/config/secondmates/lead-glm/harness")" "pi muse-spark-1.3-contributor high"
@@ -164,5 +182,15 @@ has "failed request names the cause" "$out" "the real request on deepseek/deepse
 has "failed request restores" "$out" "restored 4 file(s)"
 is "every file is back" "$(snap)" "$moved"
 is "no log line for the failed switch" "$(grep -c deepseek "$home/state/route-change.log")" 0
+
+# An unusable quota-axi reading (lib signature drift): refused, nothing written.
+mkdir -p "$work/home2/config" "$work/home2/state" "$work/home2/bin"
+sed 's/def quota_row(/def quota_row_unusable(/' "$home/bin/fm-quota-axi-lib.sh" >"$work/home2/bin/fm-quota-axi-lib.sh"
+cp "$work/dispatch.orig" "$work/home2/config/crew-dispatch.json"
+out=$("$rc_bin" "$work/home2" muse-spark-1.3-contributor 2>&1)
+is "an unusable quota reading exits non-zero" "$?" 1
+has "an unusable quota reading is refused" "$out" "quota-axi reading unusable"
+is "the unusable-reading refusal writes nothing" \
+  "$(cmp -s "$work/dispatch.orig" "$work/home2/config/crew-dispatch.json" && echo same)" same
 
 [ "$fails" = 0 ] && echo "PASS route-change e2e" || { echo "FAIL route-change e2e ($fails)"; exit 1; }

@@ -86,9 +86,10 @@ why=$(jq -r --arg p "$provider" --arg m "$route" "$FM_QUOTA_ROW_JQ"'
     | select(.runway.status == "exhausted_now") | .scope as $s
     | select($s == "all_models" or $s == "all_products" or $s == ("model:" + $b) or $s == ("product:" + $b))
     | "\($s), window \(.runway.limitingWindowId // .limitingWindowIds[0]? // "unknown")"]
-  | first // empty' <<<"$quota")
+  | first // empty' <<<"$quota") || die "quota-axi reading unusable"
 [ -z "$why" ] || die "refused: quota-axi reads $provider exhausted now ($why); nothing written"
-if jq -e --arg m "$route" '[.. | objects | select(.model? == $m)] | length > 0' \
+if jq -e --arg p "$provider" --arg m "$route" \
+  '[.. | objects | select((.model? == $m) or (.model? == ($p + "/" + $m)))] | length > 0' \
   "$STATE/quota-failover-dead.json" >/dev/null 2>&1; then
   die "refused: quota-failover holds $route out of dispatch until it answers its test again; nothing written"
 fi
@@ -124,7 +125,7 @@ for i, line in enumerate(lines):
     if line.lstrip().startswith('#') or not line.strip():
         continue
     if re.match(r'^agent:', line):
-        lines[i] = 'agent: pi\n'; done.add('agent')
+        lines[i] = re.sub(r'^(agent:\s*)\S+', lambda mm: mm.group(1) + 'pi', line); done.add('agent')
     if re.match(r'^\S', line):
         block = line.startswith('agent_config:'); pi = None; continue
     m = re.match(r'^(\s+)(\S+):', line)
@@ -135,7 +136,7 @@ for i, line in enumerate(lines):
     if m.group(2) == 'pi' and pi is None:
         pi = len(m.group(1))
     elif pi is not None and m.group(2) == 'model':
-        lines[i] = m.group(1) + 'model: ' + route + '\n'; done.add('model')
+        lines[i] = re.sub(r'^(\s+model:\s*)\S+', lambda mm: mm.group(1) + route, line); done.add('model')
 if done != {'agent', 'model'}:
     sys.exit('key not found: ' + ', '.join(sorted({'agent', 'model'} - done)))
 want = yaml.safe_load(open(src)); want['agent'] = 'pi'; want['agent_config']['pi']['model'] = route
