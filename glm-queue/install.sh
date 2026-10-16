@@ -14,6 +14,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+case $MAX in *[!0-9]*|0) echo "install.sh: --max needs a positive integer, got '$MAX'" >&2; exit 2 ;; esac
 NODE=$(command -v node) || { echo "install.sh: node not found on PATH" >&2; exit 1; }
 SRC=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/glm-queue.mjs
 DEST=${XDG_DATA_HOME:-$HOME/.local/share}/fm-glm-queue/glm-queue.mjs

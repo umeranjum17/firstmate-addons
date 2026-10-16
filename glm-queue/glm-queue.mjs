@@ -10,6 +10,7 @@ import https from 'node:https';
 
 const MAX = Number(process.env.GLM_QUEUE_MAX || 8);
 const PORT = Number(process.env.GLM_QUEUE_PORT || 8787);
+if (!Number.isInteger(MAX) || MAX < 1) throw new Error(`glm-queue: GLM_QUEUE_MAX must be a positive integer, got "${process.env.GLM_QUEUE_MAX}"`);
 const UP = new URL(process.env.GLM_QUEUE_UPSTREAM || 'https://api.z.ai');
 const lib = UP.protocol === 'https:' ? https : http;
 const agent = new lib.Agent({ keepAlive: true });
