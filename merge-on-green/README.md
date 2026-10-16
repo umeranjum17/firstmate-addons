@@ -21,7 +21,8 @@ Any refusal or FAIL prints one wake line naming the task, the PR URL and the fir
 so the lead acts; the refusal is remembered per task+head+reason+receipt state in
 `<home>/data/fm-merge-on-green/<task>.refused` (never in `state/`), and repeats stay silent until
 `pr_head`, the run receipt or the reason changes. A command this check itself kills on its timeout
-prints a truthful timeout wake line, records nothing, and is retried next sweep. A merge prints one
+wakes truthfully once per task+head+reason like a refusal, records no merge attempt, and is retried
+next sweep. A merge prints one
 wake line with the verified merged URL, so the lead runs the post-merge steps (install from main,
 teardown). Nothing is printed
 when nothing happened. One merge attempt per task per head: the attempted head is remembered in

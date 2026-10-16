@@ -11,9 +11,10 @@
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
 # Any refusal or FAIL: one wake line naming the task, the PR URL and the first refusal reason, so the lead
 # acts; the refusal is remembered per task+head+reason+receipt state and repeats stay silent until pr_head,
-# the run receipt or the reason changes. A command this check itself kills on its timeout prints a truthful
-# timeout wake line, records nothing, and is retried next sweep. A merge: one wake line with the verified
-# merged URL, so the lead does the post-merge steps (install from main, teardown).
+# the run receipt or the reason changes. A command this check itself kills on its timeout wakes truthfully
+# once per task+head+reason like a refusal, records no merge attempt, and is retried next sweep. A merge:
+# one wake line with the verified merged URL, so the lead does the post-merge steps (install from main,
+# teardown).
 # One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
 # add-on's own data dir (<home>/data/fm-merge-on-green/<task>.head, <task>.refused), never in state/.
 # Nothing is printed when nothing happened.
@@ -81,7 +82,7 @@ for m in "$STATE"/*.meta; do
   # 1. The evidence gate, run as its own command, must print PASS.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
   if timed_out "$lint_rc"; then
-    echo "merge-on-green: NOT merging $task $pr: checks lint timed out after ${BUDGET}s, no verdict; retrying next sweep"
+    refuse "checks lint timed out after ${BUDGET}s, no verdict; retrying next sweep" ''
     continue
   fi
   if [ "$lint_rc" -ne 0 ] || ! printf '%s\n' "$lint_out" | grep -q 'PASS'; then
@@ -102,7 +103,7 @@ for m in "$STATE"/*.meta; do
   rstamp=$(cksum < "$rcpt" 2>/dev/null)
   verdict=$(timeout "$BUDGET" jq -r '.verdict // ""' "$rcpt" 2>/dev/null); jq_rc=$?
   if timed_out "$jq_rc"; then
-    echo "merge-on-green: NOT merging $task $pr: reading the run receipt timed out after ${BUDGET}s; retrying next sweep"
+    refuse "reading the run receipt timed out after ${BUDGET}s; retrying next sweep" "$rstamp"
     continue
   fi
   rhead=$(timeout "$BUDGET" jq -r '.head // ""' "$rcpt" 2>/dev/null)
@@ -137,7 +138,7 @@ for m in "$STATE"/*.meta; do
   merge_out=$(FM_HOME="$FMH" timeout "$mbudget" "$FMH/bin/fm-pr-merge.sh" "$task" "$pr" 2>&1); merge_rc=$?
   if timed_out "$merge_rc"; then
     rm -f "$DATA/$task.head" 2>/dev/null || :
-    echo "merge-on-green: NOT merging $task $pr: fm-pr-merge timed out after ${mbudget}s, no verdict; retrying next sweep"
+    refuse "fm-pr-merge timed out, no verdict; retrying next sweep" ''
     continue
   fi
   if [ "$merge_rc" -eq 0 ]; then

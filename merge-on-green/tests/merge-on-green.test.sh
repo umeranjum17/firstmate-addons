@@ -160,22 +160,25 @@ check "j: merge attempt recorded" "$(cat "$FM/data/fm-merge-on-green/t9.head")" 
 check "j: silent after merge" "$(mog)" ""
 rm "$FM/state/t9.meta" "$FM/state/t9.run-receipt.json"
 
-# (k) a command this check kills on its own timeout is no attempt: one truthful timeout wake,
-# nothing recorded, and the next sweep retries instead of burning the head or remembering a refusal.
+# (k) a command this check kills on its own timeout is no attempt: one truthful timeout wake per
+# task+head+reason, no merge attempt recorded, and the next sweep still retries silently.
 meta t10 on "$H1" s10
 touch "$STUB_DIR/lint-slow"
 out=$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)
 check "k: lint timeout wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
 has "k: lint timeout named" "$out" "checks lint timed out"
 has "k: lint timeout truthful" "$out" "retrying next sweep"
-check "k: lint timeout not remembered" "$([ -e "$FM/data/fm-merge-on-green/t10.refused" ] && echo recorded || echo never)" never
+check "k: repeat lint timeout silent" "$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)" ""
+check "k: lint timeout remembered, no head" "$([ -e "$FM/data/fm-merge-on-green/t10.refused" ] && [ ! -e "$FM/data/fm-merge-on-green/t10.head" ] && echo timeout-only || echo wrong)" timeout-only
 rm "$STUB_DIR/lint-slow"
 touch "$STUB_DIR/merge-slow"
 out=$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)
 check "k: merge attempted then killed" "$(wc -l < "$STUB_DIR/merge-calls")" 4
 check "k: merge timeout wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
 has "k: merge timeout named" "$out" "fm-pr-merge timed out"
-check "k: merge timeout not recorded" "$([ -e "$FM/data/fm-merge-on-green/t10.head" ] && echo recorded || echo never)" never
+check "k: merge timeout not recorded as head" "$([ -e "$FM/data/fm-merge-on-green/t10.head" ] && echo recorded || echo never)" never
+check "k: repeat merge timeout silent" "$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)" ""
+check "k: repeat merge timeout still retried" "$(wc -l < "$STUB_DIR/merge-calls")" 5
 rm "$STUB_DIR/merge-slow"
 out=$(mog)
 check "k: next sweep retries and merges" "$(printf '%s\n' "$out" | wc -l)" 1
