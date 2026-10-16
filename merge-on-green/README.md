@@ -24,9 +24,10 @@ so the lead acts; the refusal is remembered per task+head+reason+receipt state i
 merged URL, so the lead runs the post-merge steps (install from main, teardown). Nothing is printed
 when nothing happened. One merge attempt per task per head: the attempted head is remembered in
 `<home>/data/fm-merge-on-green/<task>.head`, so a refused head stays quiet until the lead pushes a
-new one. Every command is bounded with `timeout` (a third of
-`FM_CHECK_TIMEOUT` each, floor 5 s, whole check capped at 80% of it), so the check finishes well
-within the watcher's per-check bound.
+new one. Every command is bounded with `timeout` (a third of `FM_CHECK_TIMEOUT` each, floor 5 s):
+gate commands start only before 80% of the bound, a merge only when it fits inside the whole bound,
+so the watcher's kill can at worst cut a gate command (harmlessly retried next sweep), never a
+merge.
 
 ## Install
 

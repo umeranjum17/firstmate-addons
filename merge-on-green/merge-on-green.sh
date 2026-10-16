@@ -16,7 +16,8 @@
 # One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
 # add-on's own data dir (<home>/data/fm-merge-on-green/<task>.head, <task>.refused), never in state/.
 # Nothing is printed when nothing happened.
-# Every command is bounded with timeout, so the check finishes well within FM_CHECK_TIMEOUT.
+# Every command is bounded with timeout; a merge always finishes before the watcher's kill, a gate cut
+# by it is retried next sweep.
 set -u
 [ "$#" -eq 2 ] && [ "$1" = check ] && [ -d "$2/state" ] || { echo "usage: merge-on-green.sh check <fm-home>" >&2; exit 2; }
 FMH=$(cd "$2" && pwd -P)
@@ -24,8 +25,9 @@ STATE=$FMH/state
 LINT=${FM_MOG_CHECKS_LINT:-/home/umer/firstmate/config/fm-checks-lint.sh}
 DATA=$FMH/data/fm-merge-on-green
 umask 077
-# One third of the watcher's per-check bound per command (floor 5s), and the whole check stops
-# at 80% of it: the watcher kills at FM_CHECK_TIMEOUT and a check killed mid-merge helps nobody.
+# One third of the watcher's per-check bound per command (floor 5s). Gate commands start only while
+# under 80% of the bound and a merge only when it fits inside the whole bound, so the watcher's kill
+# at FM_CHECK_TIMEOUT can at worst cut a gate command (harmlessly retried next sweep), never a merge.
 BUDGET=$(( ${FM_CHECK_TIMEOUT:-30} / 3 )); [ "$BUDGET" -ge 5 ] || BUDGET=5
 START=$(date +%s)
 DEADLINE=$(( START + ${FM_CHECK_TIMEOUT:-30} * 4 / 5 ))
