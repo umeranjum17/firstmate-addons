@@ -43,8 +43,9 @@ http.createServer({ requestTimeout: 0 }, async (req, res) => {
     res.writeHead(upRes.statusCode, upRes.headers);
     upRes.pipe(res);
     upRes.on('end', () => finish(upRes.statusCode));
-    upRes.on('error', () => finish('upstream-error'));
+    upRes.on('error', () => { res.end(); finish('upstream-error'); });
   });
+  up.setTimeout(300_000, () => up.destroy(new Error('upstream idle timeout')));
   up.on('error', (e) => {
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
     res.end(`glm-queue: upstream ${UP.host} failed: ${e.message}\n`);
