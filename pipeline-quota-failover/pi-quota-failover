@@ -8,10 +8,11 @@
 # phrasings are terminal). A dead first model then wastes 4 attempts and the
 # run fails, costing a restart.
 #
-# This wrapper runs the real pi; when an attempt answers a QUOTA error, it
-# moves at once to the next model in an allowed chain (default GLM 5.3 Flash,
-# then Go Muse 1.3 Contributor, then DeepSeek v4.1 Flash - never Claude, never
-# Step 5) inside the same invocation. Any non-quota failure passes through
+# This wrapper runs the real pi; the requested chain model goes first, then
+# the other chain models in chain order (default GLM 5.3 Flash, then Go Muse
+# 1.3 Contributor, then DeepSeek v4.1 Flash - never Claude, never Step 5), and
+# when an attempt answers a QUOTA error it moves at once to the next model in
+# that order inside the same invocation. Any non-quota failure passes through
 # byte-for-byte with its original exit code, so the pipeline's own handling is
 # untouched. When every model in the chain is quota-dead it fails once with a
 # line containing "quota exhausted", which no-mistakes classifies as terminal,
