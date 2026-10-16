@@ -5,9 +5,9 @@ JSON reader the dashboard consumes as its `fm-flow.v1` observation — moved
 **verbatim** out of the Firstmate fork into this add-on repository. Nothing
 calls it from here yet: the fork's `bin/fm-flow.sh` stays the live reader the
 shipped dashboard runs, and the fork-side shim that will exec into this
-directory lands in a later PR. Until that swap this directory is dormant, and
-every moved byte below is identical to the fork copy the live reader runs
-today.
+directory lands in a later PR. Until that swap the reader stays dormant, and
+every moved reader byte below is identical to the fork copy the live reader
+runs today.
 
 ## Layout
 
