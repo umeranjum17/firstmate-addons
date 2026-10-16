@@ -80,3 +80,6 @@ jobs:
       # Stub emulator, Gradle, pgrep and memory files only: nothing heavy starts.
       - name: Memory gate test
         run: bash host-memory/tests/fm-mem-gate.test.sh
+      # Fixture home and config, stub quota-axi and pi: nothing real is touched.
+      - name: Route change test
+        run: bash route-change/tests/route-change-e2e.sh
