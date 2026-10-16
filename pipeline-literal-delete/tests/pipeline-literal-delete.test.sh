@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # the rule text and hook commands are the test subject: their literal $ and $(...) must not expand
 # Integration: install into a throwaway HOME/XDG copy and check the rule reaches the pipeline-agent
 # instruction surfaces (the installed pi extension's before_agent_start handler and the Claude
 # SessionStart hook command exactly as settings.json names it), the rerun changes nothing, and a
