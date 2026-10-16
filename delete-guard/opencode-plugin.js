@@ -1,5 +1,4 @@
-// Fleet delete guard for OpenCode (installed by firstmate-addons delete-guard/install.sh).
-// Throwing from tool.execute.before stops the bash call.
+// Fleet delete guard for OpenCode (installed by firstmate-addons delete-guard/install.sh); throwing stops the bash call.
 import { guard } from "__GUARD__";
 
 export const FmDeleteGuard = async ({ directory }) => ({

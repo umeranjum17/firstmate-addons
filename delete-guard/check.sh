@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# delete-guard watcher check: prints one wake line for delete-guard.log rows
-# appended since the last sweep, and nothing when there are none.
-# Usage: check.sh <fm-home>
+# delete-guard watcher check: prints one wake line for delete-guard.log rows appended since the last sweep, and
+# nothing when there are none. Usage: check.sh <fm-home>
 set -u
 LOG="$1/state/delete-guard.log" SEEN="$1/state/.delete-guard.seen"
 [ -f "$LOG" ] || exit 0

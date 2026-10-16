@@ -1,10 +1,10 @@
 // Fleet delete guard: the one rule every runtime adapter calls (pi, opencode, and this file's CLI for the Claude hook).
 // A block is final: no allow-once, flag or env override. Each block appends one JSON line to <home>/state/delete-guard.log
 // for the delete-guard check; a repeat by the same task within REPEAT_SECS also queues an immediate wake for that home.
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { homedir, userInfo } from "node:os";
-import { dirname, posix } from "node:path";
+import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
@@ -101,8 +101,11 @@ function escalate(row) {
 export function guard(command, { cwd = process.cwd(), runtime = "unknown" } = {}) {
 	const target = blockedDelete(String(command ?? ""));
 	if (target === null) return null;
-	const inbox = process.env.FM_TASK_INBOX || "", env = process.env;
-	const row = { at: new Date().toISOString(), home: inbox ? dirname(dirname(inbox)) : env.FM_HOME || "", task: env.FM_TASK_ID || "", cwd, runtime, target, command: String(command).slice(0, 600) };
+	const env = process.env;
+	// The true home: the task's inbox, else the firstmate home holding cwd (a lead or Main may inherit another FM_HOME), else FM_HOME.
+	let home = env.FM_TASK_INBOX ? dirname(dirname(env.FM_TASK_INBOX)) : "";
+	for (let d = resolve(cwd); !home && d !== "/"; d = dirname(d)) if (existsSync(`${d}/bin/fm-wake-lib.sh`) && existsSync(`${d}/state`)) home = d;
+	const row = { at: new Date().toISOString(), home: home || env.FM_HOME || "", task: env.FM_TASK_ID || "", cwd, runtime, target, command: String(command).slice(0, 600) };
 	let note = "";
 	try { escalate(row); } catch (e) { note = ` (the block could not be logged: ${e.message})`; }
 	return (

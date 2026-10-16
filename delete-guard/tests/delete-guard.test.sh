@@ -54,4 +54,6 @@ grep -q 'delete-guard' "$T/fm/state/.wake-queue" 2>/dev/null && no "first block 
 FM_TASK_ID=t1 FM_TASK_INBOX="$T/lead/state/t1.inbox" hookrun /w 'rm -rf "$HOME"' || true
 grep -q "delete guard REPEAT: task t1 tried 2 .*home $T/lead," "$T/fm/state/.wake-queue" && ok "repeat queues an immediate wake" || no "no repeat wake"
 tail -n1 "$T/fm/state/delete-guard.log" | jq -e --arg h "$T/lead" '.task == "t1" and .home == $h and .cwd == "/w" and .runtime == "claude"' >/dev/null && ok "log line names home, task, cwd, runtime" || no "log line fields"
+FM_HOME=/elsewhere hookrun "$T/fm/state" 'rm -rf ~' || true # a lead with an inherited FM_HOME, working in its own home
+tail -n1 "$T/fm/state/delete-guard.log" | jq -e --arg h "$T/fm" '.home == $h and .task == ""' >/dev/null && ok "no-task block logs the home holding cwd" || no "home from cwd"
 [ "$fail" -eq 0 ] && echo PASS || { echo FAIL; exit 1; }

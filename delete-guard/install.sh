@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Install or update the fleet delete guard for this user and register its
-# watcher check in one firstmate home. Idempotent: rerun it to update.
-# Usage: install.sh [--dry-run] <fm-home>
+# Install or update the fleet delete guard for this user and register its watcher check in one firstmate home.
+# Idempotent: rerun it to update. Usage: install.sh [--dry-run] <fm-home>
 set -euo pipefail
-
 DRY=0
 [ "${1:-}" = --dry-run ] && { DRY=1; shift; }
 [ "$#" -eq 1 ] && [ -x "$1/bin/fm-check-register.sh" ] || { echo "usage: install.sh [--dry-run] <fm-home>" >&2; exit 2; }
@@ -14,8 +12,7 @@ STAMP=$(date +%s)
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
 
-# put <target> <candidate> [jq-path]: replace target with candidate when they
-# differ, after a backup; prints the diff (only the jq-path section of JSON).
+# put <target> <candidate> [jq-path]: replace target with candidate after a backup; prints the diff (JSON: only jq-path).
 put() {
   local target=$1 new=$2 view=${3:-} old="$TMP/old"
   if [ -e "$target" ] && cmp -s "$target" "$new"; then echo "unchanged: $target"; return; fi
@@ -56,9 +53,5 @@ hook "$HOME/.claude/settings.json" claude
 
 printf '#!/usr/bin/env bash\nexec %q %q\n' "$DEST/check.sh" "$FMH" > "$TMP/check"
 put "$FMH/state/delete-guard.check.sh" "$TMP/check"
-if [ "$DRY" -eq 0 ]; then
-  chmod 700 "$FMH/state/delete-guard.check.sh"
-  FM_HOME="$FMH" "$FMH/bin/fm-check-register.sh" delete-guard
-else
-  echo "dry run: nothing written; would run $FMH/bin/fm-check-register.sh delete-guard"
-fi
+[ "$DRY" -eq 0 ] || { echo "dry run: nothing written; would run $FMH/bin/fm-check-register.sh delete-guard"; exit 0; }
+chmod 700 "$FMH/state/delete-guard.check.sh" && FM_HOME="$FMH" "$FMH/bin/fm-check-register.sh" delete-guard
