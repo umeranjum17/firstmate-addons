@@ -36,6 +36,7 @@ EOF
 cat > "$FM/bin/fm-pr-merge.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s|%s\n' "$FM_HOME" "$*" >> "$STUB_DIR/merge-calls"
+[ -f "$STUB_DIR/merge-slow" ] && sleep 600
 if [ -f "$STUB_DIR/merge-refuse" ]; then
   echo "error: pull request is not mergeable: required check ci is red" >&2
   exit 1
@@ -45,6 +46,7 @@ EOF
 cat > "$STUB_DIR/fm-checks-lint.sh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s|%s\n' "$FM_HOME" "$*" >> "$STUB_DIR/lint-calls"
+[ -f "$STUB_DIR/lint-slow" ] && sleep 600
 if [ -f "$STUB_DIR/lint-fail" ]; then
   echo "checks-lint: FAIL: evidence: not proven: no verify skill ran"
   exit 1
@@ -157,6 +159,29 @@ has "j: merged line" "$out" "merged t9 https://github.com/ex/r/pull/9"
 check "j: merge attempt recorded" "$(cat "$FM/data/fm-merge-on-green/t9.head")" "$H2"
 check "j: silent after merge" "$(mog)" ""
 rm "$FM/state/t9.meta" "$FM/state/t9.run-receipt.json"
+
+# (k) a command this check kills on its own timeout is no attempt: one truthful timeout wake,
+# nothing recorded, and the next sweep retries instead of burning the head or remembering a refusal.
+meta t10 on "$H1" s10
+touch "$STUB_DIR/lint-slow"
+out=$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)
+check "k: lint timeout wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
+has "k: lint timeout named" "$out" "checks lint timed out"
+has "k: lint timeout truthful" "$out" "retrying next sweep"
+check "k: lint timeout not remembered" "$([ -e "$FM/data/fm-merge-on-green/t10.refused" ] && echo recorded || echo never)" never
+rm "$STUB_DIR/lint-slow"
+touch "$STUB_DIR/merge-slow"
+out=$(FM_CHECK_TIMEOUT=9 "$SRC/merge-on-green.sh" check "$FM" 2>&1)
+check "k: merge attempted then killed" "$(wc -l < "$STUB_DIR/merge-calls")" 4
+check "k: merge timeout wakes once" "$(printf '%s\n' "$out" | wc -l)" 1
+has "k: merge timeout named" "$out" "fm-pr-merge timed out"
+check "k: merge timeout not recorded" "$([ -e "$FM/data/fm-merge-on-green/t10.head" ] && echo recorded || echo never)" never
+rm "$STUB_DIR/merge-slow"
+out=$(mog)
+check "k: next sweep retries and merges" "$(printf '%s\n' "$out" | wc -l)" 1
+has "k: merged after timeout" "$out" "merged t10 https://github.com/ex/r/pull/10"
+check "k: head recorded after merge" "$(cat "$FM/data/fm-merge-on-green/t10.head")" "$H1"
+rm "$FM/state/t10.meta" "$FM/state/t10.run-receipt.json"
 
 # (g) install --dry-run lists the steps and writes nothing.
 cat > "$FM/bin/fm-check-register.sh" <<'EOF'

@@ -20,8 +20,10 @@ it runs, in this order and as separate sequential commands, never piped and neve
 Any refusal or FAIL prints one wake line naming the task, the PR URL and the first refusal reason,
 so the lead acts; the refusal is remembered per task+head+reason+receipt state in
 `<home>/data/fm-merge-on-green/<task>.refused` (never in `state/`), and repeats stay silent until
-`pr_head`, the run receipt or the reason changes. A merge prints one wake line with the verified
-merged URL, so the lead runs the post-merge steps (install from main, teardown). Nothing is printed
+`pr_head`, the run receipt or the reason changes. A command this check itself kills on its timeout
+prints a truthful timeout wake line, records nothing, and is retried next sweep. A merge prints one
+wake line with the verified merged URL, so the lead runs the post-merge steps (install from main,
+teardown). Nothing is printed
 when nothing happened. One merge attempt per task per head: the attempted head is remembered in
 `<home>/data/fm-merge-on-green/<task>.head`, so a refused head stays quiet until the lead pushes a
 new one. Every command is bounded with `timeout` (a third of `FM_CHECK_TIMEOUT` each, floor 5 s):

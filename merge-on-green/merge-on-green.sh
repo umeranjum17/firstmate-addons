@@ -11,8 +11,9 @@
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
 # Any refusal or FAIL: one wake line naming the task, the PR URL and the first refusal reason, so the lead
 # acts; the refusal is remembered per task+head+reason+receipt state and repeats stay silent until pr_head,
-# the run receipt or the reason changes. A merge: one wake line with the verified merged URL, so the lead
-# does the post-merge steps (install from main, teardown).
+# the run receipt or the reason changes. A command this check itself kills on its timeout prints a truthful
+# timeout wake line, records nothing, and is retried next sweep. A merge: one wake line with the verified
+# merged URL, so the lead does the post-merge steps (install from main, teardown).
 # One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
 # add-on's own data dir (<home>/data/fm-merge-on-green/<task>.head, <task>.refused), never in state/.
 # Nothing is printed when nothing happened.
@@ -48,6 +49,8 @@ first_reason() { # first non-empty line of a command's output, trimmed to keep t
   printf '%s' "$r"
 }
 
+timed_out() { [ "$1" = 124 ] || [ "$1" = 137 ]; }
+
 refuse() { # <reason> <receipt-stamp>: the wake line prints once per task+head+reason+receipt state,
   # remembered like the merge path in <task>.refused; silent while all three hold.
   [ "$(cat "$DATA/$task.refused" 2>/dev/null)" = "$(printf '%s\n%s\n%s\n' "$pr_head" "$1" "$2")" ] && return 0
@@ -77,6 +80,10 @@ for m in "$STATE"/*.meta; do
 
   # 1. The evidence gate, run as its own command, must print PASS.
   lint_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$LINT" "$pr" "$FMH/data/$task" 2>&1); lint_rc=$?
+  if timed_out "$lint_rc"; then
+    echo "merge-on-green: NOT merging $task $pr: checks lint timed out after ${BUDGET}s, no verdict; retrying next sweep"
+    continue
+  fi
   if [ "$lint_rc" -ne 0 ] || ! printf '%s\n' "$lint_out" | grep -q 'PASS'; then
     refuse "checks lint refused: $(first_reason "$lint_out" "$lint_rc")" ''
     continue
@@ -94,6 +101,10 @@ for m in "$STATE"/*.meta; do
   fi
   rstamp=$(cksum < "$rcpt" 2>/dev/null)
   verdict=$(timeout "$BUDGET" jq -r '.verdict // ""' "$rcpt" 2>/dev/null); jq_rc=$?
+  if timed_out "$jq_rc"; then
+    echo "merge-on-green: NOT merging $task $pr: reading the run receipt timed out after ${BUDGET}s; retrying next sweep"
+    continue
+  fi
   rhead=$(timeout "$BUDGET" jq -r '.head // ""' "$rcpt" 2>/dev/null)
   rgen=$(timeout "$BUDGET" jq -r '.spawn_gen // ""' "$rcpt" 2>/dev/null)
   if [ "$jq_rc" -ne 0 ] || [ -z "$verdict$rhead$rgen" ]; then
@@ -117,11 +128,18 @@ for m in "$STATE"/*.meta; do
   # charge, no --auto is ever passed. The attempted head is recorded first, so a check killed between
   # record and merge cannot retry the same head next sweep.
   # A merge killed by the watcher after the head was recorded burns it with no wake line:
-  # start one only when it still fits inside the watcher's whole-check bound.
-  [ $(( $(date +%s) + BUDGET + 1 )) -le $(( START + ${FM_CHECK_TIMEOUT:-30} )) ] || exit 0
+  # start one only when it still fits inside the watcher's whole-check bound; the fit arithmetic
+  # doubles as the merge's bound, so the whole remaining window is available to it.
+  mbudget=$(( START + ${FM_CHECK_TIMEOUT:-30} - $(date +%s) - 1 ))
+  [ "$mbudget" -ge "$BUDGET" ] || exit 0
   mkdir -p "$DATA" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA"; continue; }
   printf '%s\n' "$pr_head" > "$DATA/$task.head" || { echo "merge-on-green: NOT merging $task $pr: cannot write $DATA/$task.head"; continue; }
-  merge_out=$(FM_HOME="$FMH" timeout "$BUDGET" "$FMH/bin/fm-pr-merge.sh" "$task" "$pr" 2>&1); merge_rc=$?
+  merge_out=$(FM_HOME="$FMH" timeout "$mbudget" "$FMH/bin/fm-pr-merge.sh" "$task" "$pr" 2>&1); merge_rc=$?
+  if timed_out "$merge_rc"; then
+    rm -f "$DATA/$task.head" 2>/dev/null || :
+    echo "merge-on-green: NOT merging $task $pr: fm-pr-merge timed out after ${mbudget}s, no verdict; retrying next sweep"
+    continue
+  fi
   if [ "$merge_rc" -eq 0 ]; then
     echo "merge-on-green: merged $task $pr through fm-pr-merge; lead: run the post-merge steps (install from main, teardown)"
   else
