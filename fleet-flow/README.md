@@ -40,6 +40,16 @@ Install with `fleet-flow/install.sh [--dry-run]`: it copies the check to `${XDG_
 Main's `config/fm-flow-check.sh` then becomes a symlink to that copy, not an exec shim, because `bin/fm-flow.sh` reads its stage-clock policy from that file's text.
 Test: `tests/fm-flow-check.test.sh` drives the real check over a fixture Main home and one lead home with stub `fm-tasks-axi.sh` and `fm-crew-state.sh`.
 
+## Install (operator, after merge)
+
+The firstmate-addons lead performs these steps from a checkout of merged `main`; the add-on never writes Main's config.
+
+1. `fleet-flow/install.sh --dry-run`, then `fleet-flow/install.sh` — copies the check to `${XDG_DATA_HOME:-~/.local/share}/fm-fleet-flow/fm-flow-check.sh`.
+2. `cmp fleet-flow/bin/fm-flow-check.sh "${XDG_DATA_HOME:-~/.local/share}/fm-fleet-flow/fm-flow-check.sh"` — must print nothing.
+3. `mv /home/umer/firstmate/config/fm-flow-check.sh /home/umer/firstmate/config/.bak-$(date +%Y%m%d)-slots` and `ln -s "${XDG_DATA_HOME:-~/.local/share}/fm-fleet-flow/fm-flow-check.sh" /home/umer/firstmate/config/fm-flow-check.sh`.
+
+The symlink is deliberate, not an exec shim: `bin/fm-flow.sh` reads its stage-clock policy from that file's text.
+
 ## Frozen contract (identical to the fork)
 
 - CLI: `FM_HOME=<home> fm-flow.sh --json [--now <unix-seconds>] [--checks]
