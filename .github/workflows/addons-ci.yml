@@ -16,7 +16,8 @@ jobs:
     name: Add-on self-checks
     runs-on: ubuntu-latest
     # Normal tier: a shellcheck pass and a bash parse over a handful of
-    # scripts, plus the memory gate's stubbed integration test (about 20 s).
+    # scripts, plus the stubbed memory-gate and route-change e2e tests
+    # (about 20 s and a python3-yaml install).
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
