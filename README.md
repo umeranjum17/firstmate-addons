@@ -11,15 +11,10 @@ The one `$VAR` exception: when `d=$(mktemp)` or `d=$(mktemp -d)` is its own stat
 Each block appends one JSON line (time, home, task, cwd, runtime, target, command) to `<fm-home>/state/delete-guard.log`.
 The `delete-guard` watcher check turns new lines into one wake on the watcher's check cadence (5 minutes by default).
 A second block by the same task (or, with no task, the same cwd) within 10 minutes queues an immediate `delete guard REPEAT` wake.
+A heredoc body fed to a shell (`bash <<EOF`, `cat <<EOF | sh`) is checked as commands, and one fed to anything else (`python3`, `cat > file`) is data.
 Only the command string is checked, so a delete inside a script file the agent runs is not seen.
-
-| Runtime | Covered by |
-| --- | --- |
-| Claude Code (workers, leads, Main, and the no-mistakes Claude agent, which loads user settings) | `PreToolUse` Bash hook in `~/.claude/settings.json` |
-| pi (workers and the no-mistakes pi agent) | `~/.pi/agent/extensions/fm-rm-guard.ts`, replacing the 16 Oct stopgap |
-| OpenCode | `~/.config/opencode/plugins/fm-delete-guard.js` |
-| Codex | **Not covered.** Firstmate launches Codex crewmates and scouts with `--disable hooks`, and a new `~/.codex/hooks.json` entry would put Codex's hook-trust prompt in front of every other Codex launch |
-| cursor-agent, grok, omp, kimi, gemini | Not covered: installed here but not dispatched by the fleet; cursor, grok and omp have hook points upstream already uses, for a later slice; kimi and gemini were not checked |
+Covered: Claude Code (workers, leads, Main and the no-mistakes Claude agent) by a `PreToolUse` Bash hook in `~/.claude/settings.json`, pi by `~/.pi/agent/extensions/fm-rm-guard.ts` (replacing the 16 Oct stopgap), and OpenCode by `~/.config/opencode/plugins/fm-delete-guard.js`.
+Not covered: Codex, because Firstmate launches its crewmates and scouts with `--disable hooks` and a new `~/.codex/hooks.json` entry puts a hook-trust prompt in front of every Codex launch, and cursor-agent, grok, omp, kimi and gemini, which the fleet does not dispatch.
 
 Install or update with `delete-guard/install.sh [--dry-run] <main-fm-home>`; it is idempotent, and `--dry-run` prints the changes and writes nothing.
 It backs up each file it changes as `<file>.bak-delete-guard-<epoch>`, copies the rule to `${XDG_DATA_HOME:-~/.local/share}/fm-delete-guard/`, writes the adapters, merges the Claude hook without dropping other settings, and registers the check in `<main-fm-home>`.

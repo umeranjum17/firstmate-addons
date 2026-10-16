@@ -1,8 +1,6 @@
-// Fleet delete guard: the one rule every runtime adapter calls (pi, opencode, and
-// this file's CLI for the Claude Code hook). A block is final: there is no
-// allow-once, flag or environment override. Each block appends one JSON line to
-// <home>/state/delete-guard.log for the delete-guard check; a repeat by the same
-// task within REPEAT_SECS also queues an immediate wake for that home.
+// Fleet delete guard: the one rule every runtime adapter calls (pi, opencode, and this file's CLI for the Claude hook).
+// A block is final: no allow-once, flag or env override. Each block appends one JSON line to <home>/state/delete-guard.log
+// for the delete-guard check; a repeat by the same task within REPEAT_SECS also queues an immediate wake for that home.
 import { appendFileSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { homedir, userInfo } from "node:os";
@@ -19,9 +17,8 @@ function words(segment) {
 	return (segment.match(/(?:"[^"]*"|'[^']*'|[^\s"'])+/g) ?? []).map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, "$1$2"));
 }
 
-// The one exception to the bare-variable block: the last assignment to the variable before the delete, in the
-// same command, is its own statement d=$(mktemp) or d=$(mktemp -d), and the variable is not one the shell or
-// runtime sets. The target must be exactly "$d" or "${d}".
+// The one bare-variable exception: the last assignment to it before the delete, in the same command, is its own statement
+// d=$(mktemp) or d=$(mktemp -d), and it is not a variable the shell or runtime sets. The target must be exactly "$d" or "${d}".
 function freshTempVar(arg, segments, at) {
 	const name = (arg.match(/^\$(\w+)$|^\$\{(\w+)\}$/) ?? []).slice(1).find(Boolean);
 	if (!name || SHELL_VARS.test(name)) return false;
@@ -45,8 +42,24 @@ function dangerousTarget(arg, segments, at) {
 	return HOMES.some((h) => a === h || (a.startsWith(h + "/") && !a.slice(h.length + 1).includes("/")));
 }
 
+// Simple commands, split on ; | & and newlines outside quotes. A heredoc body fed to a shell stays commands; any other is data.
+function segmentsOf(command) {
+	const text = command.replace(/([^\n]*?)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n[ \t]*\3[ \t]*(?=\n|$)/g, (m, pre, q, tag, rest, body) =>
+		/(^|[\s;&|(/])(ba|z|da)?sh(\s|$)/.test(pre + rest) ? `${pre}${rest}\n${body}` : pre + rest);
+	const out = [""];
+	for (let i = 0, q = ""; i < text.length; i++) {
+		const c = text[i];
+		if (!q && ";|&\n".includes(c)) { out.push(""); continue; }
+		if (c === "\\" && q !== "'") out[out.length - 1] += c + (text[++i] ?? "");
+		else out[out.length - 1] += c;
+		if (c === q) q = "";
+		else if (!q && (c === '"' || c === "'")) q = c;
+	}
+	return out;
+}
+
 export function blockedDelete(command) {
-	const segments = command.split(/&&|\|\||[;|\n&]/);
+	const segments = segmentsOf(command);
 	for (const [at, segment] of segments.entries()) {
 		const w = words(segment.trim());
 		const shell = w.findIndex((t, i) => /(^|\/)(ba|z|da)?sh$/.test(t) && w[i + 1] === "-c");
@@ -105,8 +118,5 @@ if (process.argv[1] === SELF) {
 	try { p = JSON.parse(readFileSync(0, "utf8")); } catch {}
 	const r = process.argv.indexOf("--runtime");
 	const reason = guard(p?.tool_input?.command, { cwd: p?.cwd || process.cwd(), runtime: (r > 1 && process.argv[r + 1]) || "unknown" });
-	if (reason !== null) {
-		process.stderr.write(reason + "\n");
-		process.exit(2);
-	}
+	if (reason !== null) { process.stderr.write(reason + "\n"); process.exit(2); }
 }
