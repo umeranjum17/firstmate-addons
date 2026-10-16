@@ -155,3 +155,11 @@ The state defaults to `${XDG_STATE_HOME:-$HOME/.local/state}/tailscale-resilienc
 `TSR_SAMPLES`, `TSR_WINDOW`, `TSR_COOLDOWN` and `TSR_STATE_DIR` set the same knobs as the flags.
 
 The dead-display case is detected, recorded and alerted but not healed; a heal for it is a later slice.
+
+## claude-model-guard
+
+Claude Code on this host never starts Sonnet or Fable (Main3410: a live lab ran `--model sonnet`).
+`claude-model-guard/install.sh [--dry-run] [--restore] [--config-dir <dir>]` sets three keys in `<dir>/settings.json` (default `${CLAUDE_CONFIG_DIR:-~/.claude}`), key level, with a timestamped backup: `env.ANTHROPIC_DEFAULT_SONNET_MODEL` and `env.ANTHROPIC_DEFAULT_FABLE_MODEL` = `claude-haiku-5-5`, so the `sonnet` and `fable` aliases (a `--model sonnet` launch, an agent's `model: sonnet`) run on Haiku; and `availableModels: ["opus", "haiku"]`, so a full id such as `claude-sonnet-5-5` or `claude-fable-5-1` is not selectable and Claude Code falls back to its default model (Opus). Opus and Haiku stay allowed in every version. It prints only those keys and never reads or touches credentials; `--restore` removes exactly those keys.
+`deniedModels` would refuse instead, but Claude Code reads it from managed settings only (`/etc/claude-code`, root); `modelOverrides` does not remap first-party ids. A session that sets its own `CLAUDE_CONFIG_DIR` needs the installer run with `--config-dir` for that dir.
+
+Test: `claude-model-guard/tests/claude-model-guard-e2e.sh` installs into a throwaway HOME with no credential and drives the real `claude` binary: each `--model` (sonnet, fable, two full Sonnet ids, a full Fable id, opus, haiku, none) is checked against the model Claude Code dispatches to in its debug log, so no API call is made and a banned model can never run; plus key-only output, other settings kept, idempotence, backup and restore.
