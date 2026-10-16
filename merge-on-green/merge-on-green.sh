@@ -11,8 +11,9 @@
 #   3. FM_HOME=<home> bin/fm-pr-merge.sh <task> <PR URL> - never --auto, never gh merge directly.
 # Any refusal or FAIL: one wake line naming the task, the PR URL and the first refusal reason, so the lead
 # acts; the refusal is remembered per task+head+reason+receipt state and repeats stay silent until pr_head,
-# the run receipt or the reason changes. A command this check itself kills on its timeout wakes truthfully
-# once per task+head+reason like a refusal, records no merge attempt, and is retried next sweep. A merge:
+# the run receipt or the reason changes. An evidence gate or the merge this check itself kills on its
+# timeout wakes truthfully once per task+head+reason like a refusal, records no merge attempt, and is
+# retried next sweep; a fm-crew-state timeout stays silent and is retried next sweep. A merge:
 # one wake line with the verified merged URL, so the lead does the post-merge steps (install from main,
 # teardown).
 # One merge attempt per task per head: the attempted head and the last gate refusal are remembered in this
