@@ -303,6 +303,7 @@ a { color: inherit; text-decoration: none; }
   .bb-nav__inner { padding: 0 16px; }
   .bb-main { padding: 18px 16px 56px; }
   .bb-row { flex-wrap: wrap; }
+  .bb-section__head { flex-wrap: wrap; }
   .bb-row__main { flex-basis: calc(100% - 120px); }
   .bb-row__aside { flex-direction: row; align-items: baseline; gap: 8px; }
 }
@@ -503,6 +504,12 @@ __FM_BEARINGS_BOARD_DATA__
   var chartedMoreQueued = data.charted_more || 0;
   var chartedMoreWarnings = data.charted_warning_more || 0;
   function utf8ByteLength(text) { return new TextEncoder().encode(text).length; }
+  /* a repo that arrives as a path shows only its last segment, never a home path */
+  function repoLabel(name) {
+    if (typeof name !== "string" || name.indexOf("/") < 0) return name;
+    var parts = name.split("/").filter(function (x) { return x.length > 0; });
+    return parts.length ? parts[parts.length - 1] : name;
+  }
   var CHECK_SVG = '<svg class="fm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
   document.getElementById("bb-provenance").textContent = data.schema + " · " + data.generated;
@@ -513,7 +520,7 @@ __FM_BEARINGS_BOARD_DATA__
   projects.forEach(function (p) {
     var card = el("div", "bb-proj");
     var top = el("div", "bb-proj__top");
-    top.appendChild(el("span", "bb-proj__repo", p.repo));
+    top.appendChild(el("span", "bb-proj__repo", repoLabel(p.repo)));
     var hb = healthBadge(p.health);
     if (hb) top.appendChild(hb);
     card.appendChild(top);
@@ -567,7 +574,7 @@ __FM_BEARINGS_BOARD_DATA__
       top.appendChild(badge(item.risk === "low" ? "neutral" : "warn", "risk " + item.risk));
     } else {
       top.appendChild(badge("solid", "decision"));
-      top.appendChild(el("span", "bb-decision__repo", item.repo));
+      top.appendChild(el("span", "bb-decision__repo", repoLabel(item.repo)));
     }
     pad.appendChild(top);
 
@@ -715,7 +722,7 @@ __FM_BEARINGS_BOARD_DATA__
     /* captain-facing rows name the repo; the internal task id shows only when
        no repo is known */
     main.appendChild(el("div", "bb-row__sub",
-      t.doing + " · " + t.kind + " · " + (t.repo || t.id) + (t.age ? " · " + t.age + " old" : "")));
+      t.doing + " · " + t.kind + " · " + repoLabel(t.repo || t.id) + (t.age ? " · " + t.age + " old" : "")));
     row.appendChild(main);
     if (t.target || t.range) {
       var aside = el("div", "bb-row__aside");
@@ -739,7 +746,7 @@ __FM_BEARINGS_BOARD_DATA__
     row.appendChild(chk);
     var main = el("div", "bb-row__main");
     main.appendChild(el("div", "bb-row__title", t.what));
-    main.appendChild(el("div", "bb-row__sub", (t.repo || t.id) + " · " + t.owner));
+    main.appendChild(el("div", "bb-row__sub", repoLabel(t.repo || t.id) + " · " + t.owner));
     row.appendChild(main);
     if (t.pr_url) {
       row.appendChild(link("bb-row__pr", "#" + t.pr_url.split("/").pop(), t.pr_url));
@@ -789,7 +796,7 @@ __FM_BEARINGS_BOARD_DATA__
     var main = el("div", "bb-row__main");
     main.appendChild(el("div", "bb-row__title", t.title));
     /* second line keeps the title uncrowded in the half-width column */
-    var chSub = t.repo || t.id;
+    var chSub = repoLabel(t.repo || t.id);
     main.appendChild(el("div", "bb-row__sub", t.reason ? t.reason + " · " + chSub : chSub));
     row.appendChild(main);
     if (isWarning(t)) row.appendChild(badge("danger", "needs repair"));
