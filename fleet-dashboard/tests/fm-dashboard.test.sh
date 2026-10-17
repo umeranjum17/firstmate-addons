@@ -190,7 +190,7 @@ test_overview_answers_the_four_questions_with_sums_that_add_up() {
   printf 'first\t%s\tApprove the release\thttps://example.invalid/release\nsecond\t%s\tChoose a date\t\n' \
     "$((now - 7200))" "$((now - 3600))" > "$home/data/captain-asks.tsv"
   build "$home"
-  has "$d/index.html" "2 things need you. Approve the release 2 h Choose a date 1 h"
+  has "$d/index.html" "2 things need you. Newest first Oldest first All Yes/no Pick Approval yes/no Choose a date 1 h approval Approve the release 2 h"
   grep -q 'href="https://example.invalid/release"' "$d/index.html" || fail "ask URL not linked"
   # A blank row, or one without an id or text, is not an ask; a real ask with a bad time still counts.
   printf '\nbad row\n\t%s\tNo id\t\nfourth\t%s\t\t\nfifth\tsoon\tFix the time\t\n' "$now" "$now" >> "$home/data/captain-asks.tsv"
@@ -200,6 +200,25 @@ test_overview_answers_the_four_questions_with_sums_that_add_up() {
   has "$d/measure.html" "data/captain-asks.tsv row 4 skipped: no id or text" "row 5 skipped: no id or text" \
     "row 6 skipped: no id or text" "data/captain-asks.tsv malformed row 7"
   pass "the overview answers each question, and lanes, agents and groups sum to their totals"
+}
+
+test_waiting_on_you_is_newest_first_with_a_type_tag_and_filter() {
+  local home d now text
+  home=$(make_home asks)
+  d="$home/state/dashboard"
+  now=$(date +%s)
+  printf 'old\t%s\tApprove the merge\thttps://example.invalid/merge\nmid\t%s\tPick a layout: 1) blue 2) red\t\nnew\t%s\tIs the date right?\t\n' \
+    "$((now - 7200))" "$((now - 3600))" "$((now - 600))" > "$home/data/captain-asks.tsv"
+  build "$home"
+  text=$(page_text "$d/index.html")
+  case "$text" in *"Is the date right? "*"Pick a layout"*"Approve the merge"*) ;; *) fail "asks are not newest first by default: $text" ;; esac
+  has "$d/index.html" "yes/no Is the date right?" "pick Pick a layout" "approval Approve the merge" \
+    "Newest first" "Oldest first" "All" "Yes/no" "Pick" "Approval"
+  # Each ask carries its type class for the filter, and its newest-first and oldest-first ranks for the sort.
+  grep -q 'class="item k-yn" style="--n:0;--o:2"' "$d/index.html" || fail "the newest ask is not ranked 0 newest and 2 oldest"
+  grep -q 'class="item k-pick" style="--n:1;--o:1"' "$d/index.html" || fail "the pick ask is not ranked 1 newest and 1 oldest"
+  grep -q 'class="item k-approval" style="--n:2;--o:0"' "$d/index.html" || fail "the approval ask is not ranked 2 newest and 0 oldest"
+  pass "waiting on you lists newest first, tags each ask by type, and carries the sort and filter hooks"
 }
 
 test_backlog_and_method_pages_show_their_numbers() {
@@ -938,6 +957,7 @@ test_incomplete_lanes_and_moved_filings
 test_review_evidence_boundaries
 test_overview_answers_the_four_questions_with_sums_that_add_up
 test_backlog_and_method_pages_show_their_numbers
+test_waiting_on_you_is_newest_first_with_a_type_tag_and_filter
 test_fleet_past_twenty_mates_keeps_every_lead_row
 test_board_json_feeds_the_app
 test_ship_view_loads_against_the_app
