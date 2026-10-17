@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install or update the owner-details guard: copy owner-guard to
 # ${XDG_DATA_HOME:-~/.local/share}/fm-owner-guard, record the home, keep the
-# home's config/owner-details-patterns private (mode 600, created empty when
-# missing, never overwritten), and chain pre-commit and pre-push through the
+# home's config/owner-details-patterns private (mode 600, never created
+# and never overwritten), and chain pre-commit and pre-push through the
 # git-identity hooks dir. Idempotent. Usage: install.sh [--dry-run] <fm-home>
 set -euo pipefail
 DRY=0

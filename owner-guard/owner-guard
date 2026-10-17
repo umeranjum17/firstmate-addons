@@ -22,7 +22,10 @@ patterns_path() {
 HOOK=${1:-commit}
 PAT=$(patterns_path)
 TMP=$(mktemp) || exit 1
-trap 'rm -f -- "$TMP"' EXIT
+CONT=$(mktemp) || exit 1
+BODY=$(mktemp) || exit 1
+HITS=$(mktemp) || exit 1
+trap 'rm -f -- "$TMP" "$CONT" "$BODY" "$HITS"' EXIT
 # One extended regex per line; full-line # comments and blank lines ignored; case-insensitive.
 grep -v '^[[:space:]]*\(#\|$\)' "$PAT" 2>/dev/null >"$TMP" || true
 if [ ! -s "$TMP" ]; then
@@ -39,17 +42,21 @@ fi
 # scan_diff: read a -U0 diff on stdin, print file:line for each added line
 # matching the patterns. The @@ header's old+new line counts say how many
 # body lines follow, so an added line that looks like diff syntax is still
-# scanned. Never prints the patterns themselves.
+# scanned. Only the added content is matched, never the path or line number.
+# Never prints the patterns themselves.
 scan_diff() {
-  local rest='' file='' line=0 pend=0
+  local rest='' file='' line=0 pend=0 rc=0
   local re='^@@ -([0-9]+)(,([0-9]+))?[[:space:]]+\+([0-9]+)(,([0-9]+))?'
+  : >"$CONT"
+  : >"$BODY"
   while IFS= read -r rest; do
     if [ "$pend" -gt 0 ]; then
       pend=$((pend - 1))
       case "$rest" in
       '\\'*) pend=$((pend + 1)) ;; # "\ No newline" marker: not counted in the header
       '+'*) [ -n "$file" ] && [ "$file" != /dev/null ] || continue
-        printf '%s\034%s\034%s\n' "${rest#+}" "$file" "$line"
+        printf '%s\n' "${rest#+}" >>"$CONT"
+        printf '%s\034%s\n' "$file" "$line" >>"$BODY"
         line=$((line + 1)) ;;
       esac
       continue
@@ -61,11 +68,11 @@ scan_diff() {
       line=${BASH_REMATCH[4]}
       pend=$(( ${BASH_REMATCH[3]:-1} + ${BASH_REMATCH[6]:-1} )) ;;
     esac
-  done | grep -Ei -f "$TMP" 2>/dev/null | while IFS= read -r rec; do
-    rec=${rec#*$'\034'} # drop the matched content, keep file\034line
-    printf '%s:%s\n' "${rec%%$'\034'*}" "${rec#*$'\034'}"
   done
-  return 0
+  grep -Ei -n -f "$TMP" "$CONT" >"$HITS" 2>/dev/null
+  rc=$?
+  [ "$rc" -le 1 ] || exit 1
+  awk -F'\034' 'NR==FNR { n=substr($0,1,index($0,":")-1); want[n]=1; next } FNR in want { print $1 ":" $2 }' "$HITS" "$BODY"
 }
 
 refuse() { # refuse <hook> <hits>: final refusal listing file:line hits only.

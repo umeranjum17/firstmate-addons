@@ -79,6 +79,20 @@ has "missing patterns prints one note" "$out" "nothing to protect"
 
 export OWNER_GUARD_PATTERNS=$d/patterns
 
+# A pattern matches added-line content only, never the path or the line number.
+printf '%s\n' '2024' >>"$d/patterns"
+mkdir -p "$WT/docs"
+printf 'clean text\n' >"$WT/docs/2024-report.md"
+git -C "$WT" add docs/2024-report.md
+out=$(lane git commit -m 'path match only' 2>&1) && rc=0 || rc=$?
+check "pattern in path with clean content passes" "$rc" 0
+printf 'year 2024 in content\n' >"$WT/leak-year.txt"
+git -C "$WT" add leak-year.txt
+out=$(lane git commit -m 'content match' 2>&1) && rc=0 || rc=$?
+check "pattern in content refused" "$rc" 1
+has "content match prints file:line" "$out" "leak-year.txt:1"
+git -C "$WT" rm -q --cached leak-year.txt && rm -f "$WT/leak-year.txt"
+
 # Added lines that look like diff syntax are still scanned, with correct file:line.
 printf '++ testguard-fake-surname\nme guardtest042@example.test\n' >"$WT/café-notes.md"
 git -C "$WT" add café-notes.md
