@@ -109,6 +109,17 @@ plain git -C "$d/plain" -c user.name=You -c user.email=$ME commit -q --amend -m 
 check "both chained post-rewrite consumers fed" "$(grep -c . "$d/rw.log")" "2"
 check "post-rewrite replay identical to both" "$(sort -u "$d/rw.log" | wc -l)" "1"
 
+# proc-receive speaks a NUL-bearing pkt-line protocol: both chained
+# consumers must see git's exact bytes (version pkt with NUL caps, command
+# pkt, flushes).
+printf '#!/bin/sh\ncat >%q\n' "$d/pv-prev.log" >"$d/prevhooks/proc-receive"
+printf '#!/bin/sh\ncat >%q\n' "$d/pv-repo.log" >"$d/plain/.git/hooks/proc-receive"
+chmod +x "$d/prevhooks/proc-receive" "$d/plain/.git/hooks/proc-receive"
+printf '0020version=1\x00push-options atomic00000041aaaa 1111111111111111111111111111111111111111 refs/heads/pv\n0000' >"$d/pv-stream"
+(cd "$d/plain" && "$GH/proc-receive" <"$d/pv-stream" >/dev/null)
+check "proc-receive replay byte-exact to prev consumer" "$(cmp -s "$d/pv-stream" "$d/pv-prev.log" && echo same || echo diff)" "same"
+check "proc-receive replay byte-exact to repo consumer" "$(cmp -s "$d/pv-stream" "$d/pv-repo.log" && echo same || echo diff)" "same"
+
 # Lane env still refuses: the command-scope hooksPath wins over global, one verdict.
 git clone -q "$d/origin.git" "$d/clone"
 git -C "$d/clone" worktree add -q -b lane "$d/wt" origin/main

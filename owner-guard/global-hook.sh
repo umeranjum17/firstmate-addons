@@ -18,20 +18,18 @@ if [ "$NAME" = pre-commit ]; then
 else
   # The stdin-fed hooks replay git's stream to everything below (the guard
   # only runs for pre-push): none of these streams is a push range, so the
-  # guard must never scan it. The here-string replay is byte-identical (cat
-  # strips the trailing newline, <<< adds it back) and lets the consumer's
-  # exit status win even when it stops reading early.
+  # guard must never scan it. The stream is captured to a byte-exact temp
+  # file (proc-receive's pkt-lines carry NUL bytes) so every consumer's
+  # exit status wins even when it stops reading early.
   case $NAME in
   pre-push|post-rewrite|pre-receive|post-receive|proc-receive|reference-transaction)
-    INPUT=$(cat)
+    FEED=$(mktemp) || exit 1
+    trap 'rm -f -- "$FEED"' EXIT
+    cat >"$FEED"
     FED_STDIN=1 ;;
   esac
   if [ "$NAME" = pre-push ]; then
-    if [ -n "$INPUT" ]; then
-      "$HERE/owner-guard" pre-push "$@" <<<"$INPUT" || exit $?
-    else
-      "$HERE/owner-guard" pre-push "$@" || exit $?
-    fi
+    "$HERE/owner-guard" pre-push "$@" <"$FEED" || exit $?
   fi
 fi
 chain() { # chain <hookfile> [args...]: run it when executable and not this wrapper.
@@ -39,8 +37,8 @@ chain() { # chain <hookfile> [args...]: run it when executable and not this wrap
   shift
   [ -n "$f" ] && [ -f "$f" ] && [ -x "$f" ] || return 0
   [ "$f" != "$HERE/hooks/$NAME" ] || return 0
-  if [ -n "${FED_STDIN:-}" ] && [ -n "${INPUT:-}" ]; then
-    "$f" "$@" <<<"$INPUT" || exit $?
+  if [ -n "${FED_STDIN:-}" ]; then
+    "$f" "$@" <"$FEED" || exit $?
   else
     "$f" "$@" || exit $?
   fi
