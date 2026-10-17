@@ -150,14 +150,16 @@ drop_session() {
 # run_watched <args...>: the real pi with the captured stdin re-attached, killed (TERM, then KILL after a grace)
 # once it writes no stdout and no stderr for idle_secs. Sets idle_killed=1 when it did that kill.
 run_watched() {
-  local pid sizes seen='' last now g s
+  local pid='' sizes seen='' last now g s
   idle_killed=0 stop_sig=0
+  trap 'stop_sig=1; [ -z "$pid" ] || kill -INT -- "-$pid" 2>/dev/null' INT
+  trap 'stop_sig=1; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null' TERM
+  if [ "$stop_sig" = 1 ]; then trap - INT TERM; return 1; fi
   set -m
   "$real_pi" "$@" <"$stdin_file" >"$out_file" 2>"$err_file" &
   pid=$!
   set +m
-  trap 'stop_sig=1; kill -INT -- "-$pid" 2>/dev/null' INT
-  trap 'stop_sig=1; kill -TERM -- "-$pid" 2>/dev/null' TERM
+  [ "$stop_sig" = 0 ] || kill -TERM -- "-$pid" 2>/dev/null
   last=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
