@@ -218,6 +218,7 @@ test_waiting_on_you_is_newest_first_with_a_type_tag_and_filter() {
   grep -q 'class="item k-yn" style="--n:0;--o:2"' "$d/index.html" || fail "the newest ask is not ranked 0 newest and 2 oldest"
   grep -q 'class="item k-pick" style="--n:1;--o:1"' "$d/index.html" || fail "the pick ask is not ranked 1 newest and 1 oldest"
   grep -q 'class="item k-approval" style="--n:2;--o:0"' "$d/index.html" || fail "the approval ask is not ranked 2 newest and 0 oldest"
+  grep -q '#as-new:focus-visible ~ \.actl label\[for=as-new\]{outline:2px solid var(--acc);outline-offset:2px}' "$d/index.html" || fail "the sort control has no visible keyboard focus ring"
   pass "waiting on you lists newest first, tags each ask by type, and carries the sort and filter hooks"
 }
 

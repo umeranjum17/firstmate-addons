@@ -1186,7 +1186,8 @@ ASK_CSS = ('.ctl{position:absolute;opacity:0;pointer-events:none}'
            '.rows.asks .item{order:var(--n)}'
            '#as-old:checked ~ .rows.asks .item{order:var(--o)}'
            '#at-yn:checked ~ .rows.asks .item:not(.k-yn),#at-pick:checked ~ .rows.asks .item:not(.k-pick),#at-approval:checked ~ .rows.asks .item:not(.k-approval){display:none}'
-           + ''.join(f'#{s}:checked ~ .actl label[for={s}]{{background:var(--track);color:var(--text);font-weight:600}}' for s in ('as-new', 'as-old', 'at-all', 'at-yn', 'at-pick', 'at-approval')))
+           + ''.join(f'#{s}:checked ~ .actl label[for={s}]{{background:var(--track);color:var(--text);font-weight:600}}'
+                     f'#{s}:focus-visible ~ .actl label[for={s}]{{outline:2px solid var(--acc);outline-offset:2px}}' for s in ('as-new', 'as-old', 'at-all', 'at-yn', 'at-pick', 'at-approval')))
 CSS += ASK_CSS
 def ask_rows():
     if not asks_known: return f'<p class="lede">{unknown("the ask list is unreadable")}</p>'
