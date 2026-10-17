@@ -8,38 +8,38 @@ Every change still on the fork that is not on Kun's main, with its exit path and
 
 ## The add-ons
 
-| Add-on | What it does | How it wires in |
-| --- | --- | --- |
-| `alerts` | Groups lanes stopped by a provider outage into one wake per scan | dormant copy — the fork still runs its own |
-| `ask-default` | An unanswered ask falls back to its pre-declared safe default instead of blocking the home | needs a fork hook — see FORK-EXIT.md |
-| `claude-model-guard` | Keeps agent runs off Sonnet and Fable: aliases resolve to Haiku, full model ids are refused | `claude-model-guard/install.sh` |
-| `claude-quota` | Alarms when the shared Claude plan burns ahead of its 5-hour or weekly window | `claude-quota/install.sh <home>` |
-| `delete-guard` | Stops any agent from recursively deleting `/` or a home folder; a block wakes you and is final | `delete-guard/install.sh <home>` |
-| `fleet-dashboard` | The read-only fleet dashboard: board, charts, kanban, insights, ship view | served through the fork shim — see FORK-EXIT.md |
-| `fleet-flow` | Reads fleet lifecycle, queue and bottleneck JSON; installs the home flow check for lane slots | `fleet-flow/install.sh` |
-| `fleet-stall` | Wakes you when a lead idles with ready work, or workers sit stuck waiting on their lead | `FM_HOME=<home> fleet-stall/install.sh` |
-| `fleet-stats` | Per-model and per-skill fleet statistics plus the task outcome recorder | dormant copy — the fork still runs its own |
-| `git-identity` | Lane commits always carry the configured git identity; pushes of foreign-author commits are refused | `git-identity/install.sh <home>` + a fork hook |
-| `glm-queue` | One local line in front of the GLM API, so parallel calls queue instead of hitting rate limits | `glm-queue/install.sh`, then point pi at the queue |
-| `host-memory` | A gate that makes heavy jobs wait for host memory instead of crashing | `host-memory/install.sh` |
-| `local-qwen-tuning` | Operator reference for the local Qwen model server: launch, tuning, limits, rollback | reference only, nothing to install |
-| `merge-card` | Runs the merge gate and posts one evidence card per merge to the sign-off board | config shims — see Install |
-| `merge-on-green` | Merges a yolo task's PR itself once checks are green and the proof receipt passes | `merge-on-green/install.sh <home>` |
-| `nm-drain` | Updates the shared pipeline service through a planned drain, never over live runs | `nm-drain/install.sh <home>` |
-| `parked-homes` | A parked secondmate home gets no messages, nudges, relaunches or config pushes | needs fork hooks — see FORK-EXIT.md |
-| `pipeline-literal-delete` | Gives pipeline agents the safe recursive-delete rule in their own instructions | `pipeline-literal-delete/install.sh` |
-| `pipeline-quota-failover` | Moves pipeline model calls to the next model in the chain on a quota error | `pipeline-quota-failover/install.sh` |
-| `quota-failover` | Relaunches stalled workers onto a live route and rests dead routes until they answer again | a watcher check you add — see Install |
-| `receipts` | Publishes one PASS or FAIL completion receipt per task for guarded landing checks | dormant copy — the fork still runs its own |
-| `route-change` | One command moves worker dispatch, the pipeline gate and lead pins to one route together | `route-change/install.sh` |
-| `sentinel` | Re-arms supervision after an agent-runtime restart killed every agent and watcher | dormant copy — the fork still runs its own |
-| `signoff` | Turns sign-off board answers into hold answers and merge-gate events | dormant copy — the fork still runs its own |
-| `supervisor-guard` | Stops a supervisor session from doing a worker's job, via a pre-tool check | dormant copy — the fork still runs its own |
-| `tailscale-resilience` | Heals a Tailscale connection that died while its daemon still runs; alerts on a dead display | a systemd timer you add — see Install |
-| `wait-timers` | Owner-alert and escalation timers for lanes that declared a wait | dormant copy — the fork still runs its own |
-| `zai-quota-check` | Alarms when the GLM plan burns ahead of its window, naming the route moves that protect the pipeline | `FM_HOME=<home> zai-quota-check/install.sh` |
+One line per add-on, with how it wires in. `<home>` is your home folder for the fleet manager — the one with `bin/` and `state/` in it.
 
-`<home>` is your home folder for the fleet manager — the one with `bin/` and `state/` in it. Add-ons marked "dormant copy" or "fork hook" do not wire into an unmodified install of the host tool yet; [FORK-EXIT.md](FORK-EXIT.md) lists the fork changes each one waits for.
+- `alerts` — groups lanes stopped by a provider outage into one wake per scan. Dormant copy: the fork still runs its own.
+- `ask-default` — an unanswered ask falls back to its pre-declared safe default instead of blocking the home. Needs a fork hook (FORK-EXIT.md).
+- `claude-model-guard` — keeps agent runs off Sonnet and Fable: aliases resolve to Haiku, full model ids are refused. Wire in: `claude-model-guard/install.sh`.
+- `claude-quota` — alarms when the shared Claude plan burns ahead of its 5-hour or weekly window. Wire in: `claude-quota/install.sh <home>`.
+- `delete-guard` — stops any agent from recursively deleting `/` or a home folder; a block wakes you and is final. Wire in: `delete-guard/install.sh <home>`.
+- `fleet-dashboard` — the read-only fleet dashboard: board, charts, kanban, insights, ship view. Served through the fork shim (FORK-EXIT.md).
+- `fleet-flow` — reads fleet lifecycle, queue and bottleneck JSON; installs the home flow check for lane slots. Wire in: `fleet-flow/install.sh`.
+- `fleet-stall` — wakes you when a lead idles with ready work, or workers sit stuck waiting on their lead. Wire in: `FM_HOME=<home> fleet-stall/install.sh`.
+- `fleet-stats` — per-model and per-skill fleet statistics plus the task outcome recorder. Dormant copy: the fork still runs its own.
+- `git-identity` — lane commits always carry the configured git identity; pushes of foreign-author commits are refused. Wire in: `git-identity/install.sh <home>`, plus a fork hook.
+- `glm-queue` — one local line in front of the GLM API, so parallel calls queue instead of hitting rate limits. Wire in: `glm-queue/install.sh`, then point pi at the queue.
+- `host-memory` — a gate that makes heavy jobs wait for host memory instead of crashing. Wire in: `host-memory/install.sh`.
+- `local-qwen-tuning` — operator reference for the local Qwen model server: launch, tuning, limits, rollback. Reference only, nothing to install.
+- `merge-card` — runs the merge gate and posts one evidence card per merge to the sign-off board. Wire in: config shims, see Install.
+- `merge-on-green` — merges a yolo task's PR itself once checks are green and the proof receipt passes. Wire in: `merge-on-green/install.sh <home>`.
+- `nm-drain` — updates the shared pipeline service through a planned drain, never over live runs. Wire in: `nm-drain/install.sh <home>`.
+- `parked-homes` — a parked secondmate home gets no messages, nudges, relaunches or config pushes. Needs fork hooks (FORK-EXIT.md).
+- `pipeline-literal-delete` — gives pipeline agents the safe recursive-delete rule in their own instructions. Wire in: `pipeline-literal-delete/install.sh`.
+- `pipeline-quota-failover` — moves pipeline model calls to the next model in the chain on a quota error. Wire in: `pipeline-quota-failover/install.sh`.
+- `quota-failover` — relaunches stalled workers onto a live route and rests dead routes until they answer again. Wire in: a watcher check you add, see Install.
+- `receipts` — publishes one PASS or FAIL completion receipt per task for guarded landing checks. Dormant copy: the fork still runs its own.
+- `route-change` — one command moves worker dispatch, the pipeline gate and lead pins to one route together. Wire in: `route-change/install.sh`.
+- `sentinel` — re-arms supervision after an agent-runtime restart killed every agent and watcher. Dormant copy: the fork still runs its own.
+- `signoff` — turns sign-off board answers into hold answers and merge-gate events. Dormant copy: the fork still runs its own.
+- `supervisor-guard` — stops a supervisor session from doing a worker's job, via a pre-tool check. Dormant copy: the fork still runs its own.
+- `tailscale-resilience` — heals a Tailscale connection that died while its daemon still runs; alerts on a dead display. Wire in: a systemd timer you add, see Install.
+- `wait-timers` — owner-alert and escalation timers for lanes that declared a wait. Dormant copy: the fork still runs its own.
+- `zai-quota-check` — alarms when the GLM plan burns ahead of its window, naming the route moves that protect the pipeline. Wire in: `FM_HOME=<home> zai-quota-check/install.sh`.
+
+Add-ons marked "dormant copy" or "fork hook" do not wire into an unmodified install of the host tool yet; [FORK-EXIT.md](FORK-EXIT.md) lists the fork changes each one waits for.
 
 ## Install
 
