@@ -332,12 +332,12 @@ test_a_repo_given_as_a_home_path_shows_only_its_last_segment() {
   local home data out
   home=$(make_home repo-label)
   data=$(valid_payload "$home")
-  jq '.projects[0].repo = "/home/umer/sample/"
-    | .captains_call[0].repo = "/homes/umer/sample"
+  jq '.projects[0].repo = "/home/you/sample/"
+    | .captains_call[0].repo = "/homes/you/sample"
     | .underway[0] |= del(.age)
-    | .underway[0].repo = "/home/umer/sample"
-    | .landed[0].repo = "/home/umer/sample"
-    | .charted[0].repo = "/home/umer/sample"' "$data" > "$home/paths.json"
+    | .underway[0].repo = "/home/you/sample"
+    | .landed[0].repo = "/home/you/sample"
+    | .charted[0].repo = "/home/you/sample"' "$data" > "$home/paths.json"
   run_board "$home" build "$home/paths.json" >/dev/null || fail "the build failed"
   out=$(node "$HARNESS" "$(board_of "$home")") || fail "the built board could not be rendered"
   printf '%s' "$out" | jq -e '
