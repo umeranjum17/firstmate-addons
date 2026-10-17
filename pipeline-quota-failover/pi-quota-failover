@@ -99,8 +99,13 @@ mark_dead() {
 # quota_exhausted <model>: quota-axi reports exhausted_now for this model's provider with scope all_models or model:<id>.
 # Missing, slow (10s cap), failing or unparseable quota-axi answers no, so the route is tried as before.
 quota_exhausted() {
-  timeout 10 quota-axi --provider "${1%%/*}" --json --max-age 5m --no-credential-refresh 2>/dev/null \
-    | jq -e --arg p "${1%%/*}" --arg s "model:${1#*/}" '[.providers[]? | select(.provider == $p) | .quotaSemantics.effectiveAvailability[]? | select((.scope == "all_models" or .scope == $s) and .runway.status == "exhausted_now")] | length > 0' >/dev/null 2>&1
+  local answer
+  command -v jq >/dev/null 2>&1 || { log_line "jq missing: quota pre-check off, model=$1 tried as before"; return 1; }
+  answer=$(timeout 10 quota-axi --provider "${1%%/*}" --json --max-age 5m --no-credential-refresh 2>/dev/null) || {
+    log_line "quota-axi gave no answer for ${1%%/*} (exit $?); model=$1 not pre-checked"
+    return 1
+  }
+  jq -e --arg p "${1%%/*}" --arg s "model:${1#*/}" '[.providers[]? | select(.provider == $p) | .quotaSemantics.effectiveAvailability[]? | select((.scope == "all_models" or .scope == $s) and .runway.status == "exhausted_now")] | length > 0' <<<"$answer" >/dev/null 2>&1
 }
 idle_secs=${PI_QUOTA_FAILOVER_IDLE_SECS:-300}
 
@@ -145,10 +150,14 @@ drop_session() {
 # run_watched <args...>: the real pi with the captured stdin re-attached, killed (TERM, then KILL after a grace)
 # once it writes no stdout and no stderr for idle_secs. Sets idle_killed=1 when it did that kill.
 run_watched() {
-  local pid sizes seen='' last now g
+  local pid sizes seen='' last now g s
   idle_killed=0
+  set -m
   "$real_pi" "$@" <"$stdin_file" >"$out_file" 2>"$err_file" &
   pid=$!
+  set +m
+  trap 'kill -INT "$pid" 2>/dev/null' INT
+  trap 'kill -TERM "$pid" 2>/dev/null' TERM
   last=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
@@ -166,7 +175,13 @@ run_watched() {
       break
     fi
   done
-  wait "$pid"
+  while :; do
+    wait "$pid"
+    s=$?
+    kill -0 "$pid" 2>/dev/null || break
+  done
+  trap - INT TERM
+  return "$s"
 }
 
 # error_text <exit-code>: pi exits 0 even when the provider fails - the error
