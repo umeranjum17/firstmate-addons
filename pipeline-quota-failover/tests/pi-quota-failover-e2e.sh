@@ -55,7 +55,7 @@ for a in "$@"; do
   prev=$a
 done
 case $model in
-  bad/hang) exec sleep 600 ;;
+  bad/hang) sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
 printf '%s\n' '{"type":"session","id":"s-1"}'
@@ -107,7 +107,7 @@ chmod +x "$stub/quota-axi"
 
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
-export HOME="$home" XDG_STATE_HOME="$work/state"
+export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child
 PATH="$stub:$PATH"
 prompt='Reply with the single word PONG.'
 # Quota-dead markers: cleared before journeys that need every model tried.
@@ -117,6 +117,18 @@ nodead() { rm -f -- "$dead"/*; }
 age_of() { local at; read -r _ at 2>/dev/null <"$dead/${1//\//%}" && echo $(($(date +%s) - at)) || echo none; }
 backdate() { printf '%s %s\n' "$1" $(($(date +%s) - 3601)) >"$dead/${1//\//%}"; }
 fresh() { local a; a=$(age_of "$2"); if [ "$a" != none ] && [ "$a" -lt 5 ]; then ok "$1"; else no "$1: marker age [$a]"; fi; }
+# child_gone: the tool child started by the last bad/hang stub is no longer running (a zombie counts as gone).
+child_gone() {
+  local c s i
+  c=$(cat "$STUB_CHILD" 2>/dev/null) || return 1
+  for i in $(seq 30); do
+    s=$(ps -o stat= -p "$c" 2>/dev/null | tr -d ' ')
+    case $s in ''|Z*) return 0 ;; esac
+    sleep 0.1
+  done
+  kill "$c" 2>/dev/null
+  return 1
+}
 
 is "default chain is GLM, then Haiku 5.5" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" \
   "zai/glm-5.3-flash claude-bridge/claude-haiku-5-5"
@@ -291,32 +303,36 @@ log_has "idle kill logged" "pi produced no output for 2s; killing it"
 log_has "idle kill moves on to Haiku 5.5" "model=bad/hang quota-error.*no output for 2s.*moving to claude-bridge/claude-haiku-5-5"
 if [ $(($(date +%s) - t0)) -lt 10 ]; then ok "silent hang failed over in under 10s"; else no "silent hang took $(($(date +%s) - t0))s"; fi
 fresh "hung route gets a dead marker" bad/hang
+if child_gone; then ok "idle kill reached the tool child"; else no "tool child survived the idle kill"; fi
 
 # 9g. TERM to the wrapper while its pi is silent (idle path) reaches pi: the wrapper exits with pi's status, no failover.
 nodead
 : >"$STUB_ARGV"
+rm -f "$STUB_CHILD"
 printf '%s' "$prompt" >"$work/prompt9g"
 PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9g" 2>"$work/err9g" &
 wpid=$!
 t0=$(date +%s)
-for _ in $(seq 50); do [ -s "$STUB_ARGV" ] && break; sleep 0.1; done
+for _ in $(seq 50); do [ -s "$STUB_CHILD" ] && break; sleep 0.1; done
 kill -TERM "$wpid"
 wait "$wpid"
 rc=$?
 is "TERM to a silent wrapper exits with pi's status" "$rc" "143"
 if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "TERM stopped the silent pi promptly"; else no "TERM to a silent wrapper took $(($(date +%s) - t0))s"; fi
 is "no failover after TERM" "$(wc -l <"$STUB_ARGV")" "1"
+if child_gone; then ok "TERM reached the tool child"; else no "tool child survived TERM"; fi
 
 # 9h. INT to the wrapper while its pi is silent (idle path) reaches pi: the wrapper exits with pi's status, no failover.
 # Launched under job control so the wrapper does not inherit an ignored SIGINT.
 nodead
 : >"$STUB_ARGV"
+rm -f "$STUB_CHILD"
 set -m
 PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9h" 2>"$work/err9h" &
 wpid=$!
 set +m
 t0=$(date +%s)
-for _ in $(seq 50); do [ -s "$STUB_ARGV" ] && break; sleep 0.1; done
+for _ in $(seq 50); do [ -s "$STUB_CHILD" ] && break; sleep 0.1; done
 kill -INT "$wpid"
 wait "$wpid"
 rc=$?
