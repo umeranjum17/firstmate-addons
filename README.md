@@ -90,6 +90,9 @@ bash route-change/tests/route-change-e2e.sh
 bash merge-on-green/tests/merge-on-green.test.sh
 bash merge-card/tests/merge-card-e2e.sh
 bash nm-drain/tests/nm-drain.test.sh
+bash owner-guard/tests/owner-guard.test.sh
+bash owner-guard/tests/owner-guard-global.test.sh
+bash owner-guard/tests/owner-guard-merge.test.sh
 bash fleet-stall/tests/fleet-stall-e2e.sh
 bash fleet-flow/tests/fm-flow-check.test.sh
 bash host-memory/tests/fm-mem-gate.test.sh
@@ -112,6 +115,7 @@ pipeline-quota-failover/install.sh --restore             # removes the wrapper a
 "$FM_HOME/bin/fm-check-unregister.sh" fleet-stall        # then rm "$FM_HOME/state/fleet-stall.check.sh" ~/.local/share/fm-fleet-stall -r
 "$FM_HOME/bin/fm-check-unregister.sh" zai-quota          # then rm "$FM_HOME/state/zai-quota.check.sh"
 rm "$FM_HOME/config/merge-gate" "$FM_HOME/config/post-merge"                    # merge-card (with owner-guard: its config/merge-gate.pre-owner-guard instead of merge-gate)
+owner-guard/install.sh --uninstall "$FM_HOME"            # owner-guard: also restores the home's previous config/merge-gate
 rm "$FM_HOME/config/parked-homes"                        # parked-homes: a missing file parks nothing
 systemctl --user disable --now fm-glm-queue && rm -r ~/.local/share/fm-glm-queue ~/.config/systemd/user/fm-glm-queue.service   # glm-queue
 rm -r ~/.local/share/fm-route-change ~/.local/bin/route-change                  # route-change
