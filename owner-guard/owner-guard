@@ -7,11 +7,10 @@ set -u -o pipefail
 unset CDPATH
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 
-# Patterns path: explicit override; else the lane home when it holds a
-# patterns file; else the home recorded at install (the install dir is per
-# user, so a lane home without a file falls back to the installing home).
+# Patterns path: the lane home when it holds a patterns file; else the home
+# recorded at install (the install dir is per user, so a lane home without
+# a file falls back to the installing home).
 patterns_path() {
-  if [ -n "${OWNER_GUARD_PATTERNS:-}" ]; then printf '%s' "$OWNER_GUARD_PATTERNS"; return; fi
   local cand=${FM_HOME:-}
   if [ -z "$cand" ] || [ ! -s "$cand/config/owner-details-patterns" ]; then
     cand=$(cat "$HERE/home" 2>/dev/null || true)

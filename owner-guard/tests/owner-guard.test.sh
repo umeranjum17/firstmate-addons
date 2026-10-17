@@ -18,8 +18,8 @@ fails=0
 check() { if [ "$2" = "$3" ]; then echo "ok: $1"; else printf 'FAIL: %s\n  want: %s\n  got:  %s\n' "$1" "$3" "$2"; fails=$((fails + 1)); fi; }
 has() { if printf '%s' "$2" | grep -qF -- "$3"; then echo "ok: $1"; else printf 'FAIL: %s\n  want text: %s\n  got: %s\n' "$1" "$3" "$2"; fails=$((fails + 1)); fi; }
 ME=you@example.com
-printf '%s\n' '# fixture-only patterns' '' 'testguard-fake-surname' 'guardtest[0-9]{3}@example\.test' >"$d/patterns"
-export OWNER_GUARD_PATTERNS=$d/patterns FM_HOME=$FM
+printf '%s\n' '# fixture-only patterns' '' 'testguard-fake-surname' 'guardtest[0-9]{3}@example\.test' >"$FM/config/owner-details-patterns"
+export FM_HOME=$FM
 
 git init -q --bare -b main "$d/origin.git"
 git clone -q "$d/origin.git" "$d/clone"
@@ -64,23 +64,21 @@ printf 'scrubbed\n' >"$WT/gone.txt"
 git -C "$WT" add gone.txt
 out=$(lane git commit -q -m 'removal only' 2>&1) && rc=0 || rc=$?
 check "removal-only commit passes" "$rc" 0
-unset OWNER_GUARD_PATTERNS
-cp "$d/patterns" "$FM/config/owner-details-patterns"
 printf 'reach testguard-fake-surname here\n' >"$WT/fallback.txt"
 git -C "$WT" add fallback.txt
 out=$(FM_HOME=$d/empty lane git commit -m 'fallback' 2>&1) && rc=0 || rc=$?
 check "lane home without patterns falls back to install home" "$rc" 1
 has "fallback refusal prints file:line" "$out" "fallback.txt:1"
 git -C "$WT" rm -q --cached fallback.txt && rm -f "$WT/fallback.txt"
-export OWNER_GUARD_PATTERNS=$d/nonexistent
+# Missing patterns file allows with one note line.
+mv "$FM/config/owner-details-patterns" "$d/patterns.off"
 out=$(FM_HOME=$d/empty lane git commit -q --allow-empty -m 'no patterns' 2>&1) && rc=0 || rc=$?
 check "missing patterns allows" "$rc" 0
 has "missing patterns prints one note" "$out" "nothing to protect"
-
-export OWNER_GUARD_PATTERNS=$d/patterns
+mv "$d/patterns.off" "$FM/config/owner-details-patterns"
 
 # A pattern matches added-line content only, never the path or the line number.
-printf '%s\n' '2024' >>"$d/patterns"
+printf '%s\n' '2024' >>"$FM/config/owner-details-patterns"
 mkdir -p "$WT/docs"
 printf 'clean text\n' >"$WT/docs/2024-report.md"
 git -C "$WT" add docs/2024-report.md

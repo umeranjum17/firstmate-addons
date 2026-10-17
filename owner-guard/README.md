@@ -10,9 +10,9 @@ pushing the owner's private details to a public repo, shaped like
   `pre-push` scans the added lines of every pushed commit not already
   reachable from a remote-tracking ref. Each added line is
   matched case-insensitively against every extended regex in the patterns
-  file: `$OWNER_GUARD_PATTERNS` when set, else
-  `$FM_HOME/config/owner-details-patterns` when that home holds one, else the
-  installing home's file (`#` comments and blank lines ignored). A hit refuses with
+  file: `$FM_HOME/config/owner-details-patterns` when that home holds one,
+  else the installing home's file (`#` comments and blank lines ignored). A
+  hit refuses with
   `file:line` plus a placeholder hint, never the pattern list. A missing or
   empty patterns file allows with one note line.
 - `install.sh` — installs the guard, keeps the patterns file private (mode
