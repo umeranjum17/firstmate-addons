@@ -34,6 +34,7 @@ out=$("$SRC/install.sh" "$FM")
 has "install chains the hooks dir" "$out" "hooks.d"
 # shellcheck source=/dev/null
 lane() (cd "$WT" && "$FM/config/launch-env-hook" "$d/env.sh" && . "$d/env.sh" && "$@")
+lanein() (cd "$1" && shift && "$FM/config/launch-env-hook" "$d/env.sh" && . "$d/env.sh" && "$@")
 
 printf 'reach testguard-fake-surname here\n' >"$WT/details.txt"
 git -C "$WT" add details.txt
@@ -75,5 +76,56 @@ export OWNER_GUARD_PATTERNS=$d/nonexistent
 out=$(FM_HOME=$d/empty lane git commit -q --allow-empty -m 'no patterns' 2>&1) && rc=0 || rc=$?
 check "missing patterns allows" "$rc" 0
 has "missing patterns prints one note" "$out" "nothing to protect"
+
+export OWNER_GUARD_PATTERNS=$d/patterns
+
+# Added lines that look like diff syntax are still scanned, with correct file:line.
+printf '++ testguard-fake-surname\nme guardtest042@example.test\n' >"$WT/café-notes.md"
+git -C "$WT" add café-notes.md
+out=$(lane git commit -m 'diff-like lines' 2>&1) && rc=0 || rc=$?
+check "diff-like added lines refused" "$rc" 1
+has "diff-like first line labeled" "$out" "café-notes.md:1"
+has "diff-like second line labeled" "$out" "café-notes.md:2"
+git -C "$WT" rm -q --cached café-notes.md && rm -f "$WT/café-notes.md"
+
+# A first push to a remote with no refs (no remote default branch exists yet)
+# is scanned like any other new branch instead of being deadlocked.
+git init -q --bare "$d/empty-origin.git"
+git init -q -b main "$d/fresh"
+git -C "$d/fresh" remote add origin "$d/empty-origin.git"
+printf 'hello\n' >"$d/fresh/readme.md"
+git -C "$d/fresh" add readme.md
+lanein "$d/fresh" git commit -q -m first
+out=$(lanein "$d/fresh" git push -q -u origin main 2>&1) && rc=0 || rc=$?
+check "first push to an empty remote passes" "$rc" 0
+check "empty remote received the branch" "$(git -C "$d/empty-origin.git" rev-parse -q --verify refs/heads/main)" "$(git -C "$d/fresh" rev-parse HEAD)"
+printf 'reach testguard-fake-surname here\n' >"$d/fresh/docs.md"
+git -C "$d/fresh" add docs.md
+lanein "$d/fresh" git commit -q --no-verify -m docs
+out=$(lanein "$d/fresh" git push -q origin main:docs 2>&1) && rc=0 || rc=$?
+check "new-branch push with details refused" "$rc" 1
+has "new-branch refusal prints file:line" "$out" "docs.md:1"
+
+# A root (orphan-branch) commit is scanned too.
+git -C "$WT" checkout -q --orphan fresh-docs
+git -C "$WT" rm -rq --cached .
+printf 'reach testguard-fake-surname here\n' >"$WT/orphan.txt"
+git -C "$WT" add orphan.txt
+lane git commit -q --no-verify -m 'orphan leak'
+out=$(lane git push origin fresh-docs 2>&1) && rc=0 || rc=$?
+check "root-commit push refused" "$rc" 1
+has "root-commit refusal prints file:line" "$out" "orphan.txt:1"
+git -C "$WT" checkout -qf lane
+
+# A commit whose contents cannot be inspected refuses the push.
+git -C "$WT" checkout -qf -b corrupt origin/main
+printf 'clean\n' >"$WT/seed.txt"
+git -C "$WT" add seed.txt
+lane git commit -q --no-verify -m seed
+blob=$(git -C "$WT" rev-parse HEAD:seed.txt)
+rm -f "$d/clone/.git/objects/${blob:0:2}/${blob:2}"
+out=$(lane git push origin corrupt 2>&1) && rc=0 || rc=$?
+check "unscannable commit refuses the push" "$rc" 1
+check "unscannable push reached nothing" "$(git -C "$d/origin.git" rev-parse -q --verify refs/heads/corrupt)" ""
 
 if [ "$fails" -eq 0 ]; then echo "PASS"; else echo "FAILED: $fails"; exit 1; fi

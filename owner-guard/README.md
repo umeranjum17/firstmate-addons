@@ -7,8 +7,8 @@ pushing the owner's private details to a public repo, shaped like
 ## Layout
 
 - `owner-guard` — the guard. `pre-commit` scans the staged added lines;
-  `pre-push` scans the added lines of every pushed commit (a new remote
-  branch is compared against the remote default branch). Each added line is
+  `pre-push` scans the added lines of every pushed commit not already
+  reachable from a remote-tracking ref. Each added line is
   matched case-insensitively against every extended regex in the patterns
   file: `$OWNER_GUARD_PATTERNS` when set, else
   `$FM_HOME/config/owner-details-patterns` when that home holds one, else the

@@ -37,18 +37,33 @@ if [ "$rc" -gt 1 ]; then
 fi
 
 # scan_diff: read a -U0 diff on stdin, print file:line for each added line
-# matching the patterns. Never prints the patterns themselves.
+# matching the patterns. The @@ header's old+new line counts say how many
+# body lines follow, so an added line that looks like diff syntax is still
+# scanned. Never prints the patterns themselves.
 scan_diff() {
-  local rest='' file='' line=0 content=''
+  local rest='' file='' line=0 pend=0
+  local re='^@@ -([0-9]+)(,([0-9]+))?[[:space:]]+\+([0-9]+)(,([0-9]+))?'
   while IFS= read -r rest; do
+    if [ "$pend" -gt 0 ]; then
+      pend=$((pend - 1))
+      case "$rest" in
+      '\\'*) pend=$((pend + 1)) ;; # "\ No newline" marker: not counted in the header
+      '+'*) [ -n "$file" ] && [ "$file" != /dev/null ] || continue
+        printf '%s\034%s\034%s\n' "${rest#+}" "$file" "$line"
+        line=$((line + 1)) ;;
+      esac
+      continue
+    fi
     case "$rest" in
     '+++ '*) file=${rest#'+++ '}; case "$file" in '"'*'"') file=${file#'"'}; file=${file%'"'};; esac; file=${file#'b/'} ;;
-    '@@ -'*) content=${rest#*+}; line=${content%%[, ]*} ;;
-    '+'*) [ -n "$file" ] && [ "$file" != /dev/null ] || continue
-      content=${rest#'+'}
-      if printf '%s\n' "$content" | grep -Ei -q -f "$TMP"; then printf '%s:%s\n' "$file" "$line"; fi
-      line=$((line + 1)) ;;
+    '@@ -'*)
+      [[ "$rest" =~ $re ]] || continue
+      line=${BASH_REMATCH[4]}
+      pend=$(( ${BASH_REMATCH[3]:-1} + ${BASH_REMATCH[6]:-1} )) ;;
     esac
+  done | grep -Ei -f "$TMP" 2>/dev/null | while IFS= read -r rec; do
+    rec=${rec#*$'\034'} # drop the matched content, keep file\034line
+    printf '%s:%s\n' "${rec%%$'\034'*}" "${rec#*$'\034'}"
   done
   return 0
 }
@@ -66,18 +81,13 @@ refuse() { # refuse <hook> <hits>: final refusal listing file:line hits only.
 
 pre_commit() {
   local hits
-  hits=$(git diff --cached --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ | scan_diff) || true
+  hits=$(git -c core.quotePath=false diff --cached --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ | scan_diff) ||
+    { echo "owner-guard: pre-commit refused: cannot scan the staged changes" >&2; exit 1; }
   [ -z "$hits" ] || refuse pre-commit "$hits"
 }
 
-default_base() {
-  git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null ||
-    git rev-parse --verify --quiet refs/remotes/origin/main 2>/dev/null ||
-    git rev-parse --verify --quiet refs/remotes/origin/master 2>/dev/null || true
-}
-
 pre_push() {
-  local _lref lsha _rref rsha base commits c short hits all
+  local _lref lsha _rref rsha commits c short hits all
   all=''
   while read -r _lref lsha _rref rsha; do
     case "$lsha" in *[!0]*) ;; *) continue ;; esac # branch delete
@@ -88,15 +98,13 @@ pre_push() {
       commits=$(git rev-list "$rsha..$lsha" -- 2>/dev/null) ||
         { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; } ;;
     *)
-      base=$(default_base)
-      [ -n "$base" ] ||
-        { echo "owner-guard: push refused: cannot find the remote default branch for a new branch" >&2; exit 1; }
-      commits=$(git rev-list "$base..$lsha" --not --remotes -- 2>/dev/null) ||
+      commits=$(git rev-list "$lsha" --not --remotes -- 2>/dev/null) ||
         { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; } ;;
     esac
     for c in $commits; do
       short=$(git rev-parse --short "$c" 2>/dev/null || printf '%s' "$c")
-      hits=$(git diff-tree --no-commit-id --unified=0 -m -r --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ "$c" -- 2>/dev/null | scan_diff) || true
+      hits=$(git -c core.quotePath=false diff-tree --no-commit-id --root --unified=0 -m -r --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ "$c" -- 2>/dev/null | scan_diff) ||
+        { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; }
       [ -z "$hits" ] || all="$all$(printf '%s\n' "$hits" | sed "s/\$/ (commit $short)/")
 "
     done
