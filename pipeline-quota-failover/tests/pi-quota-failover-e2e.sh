@@ -120,9 +120,9 @@ backdate() { printf '%s %s\n' "$1" $(($(date +%s) - 3601)) >"$dead/${1//\//%}"; 
 fresh() { local a; a=$(age_of "$2"); if [ "$a" != none ] && [ "$a" -lt 5 ]; then ok "$1"; else no "$1: marker age [$a]"; fi; }
 # child_gone: the tool child started by the last bad/hang stub is no longer running (a zombie counts as gone).
 child_gone() {
-  local c s i
+  local c s
   c=$(cat "$STUB_CHILD" 2>/dev/null) || return 1
-  for i in $(seq 30); do
+  for _ in $(seq 30); do
     s=$(ps -o stat= -p "$c" 2>/dev/null | tr -d ' ')
     case $s in ''|Z*) return 0 ;; esac
     sleep 0.1
@@ -344,7 +344,8 @@ is "no failover after INT" "$(wc -l <"$STUB_ARGV")" "1"
 # 9i. TERM to the wrapper during the idle-kill grace window (pi ignores TERM for 2s after going silent) stops the
 # call: no failover to the next model, pi's status passes through.
 nodead
-: >"$STUB_ARGV" >"$log"
+: >"$STUB_ARGV"
+: >"$log"
 PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/grace claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/grace --mode json --no-session <"$work/prompt9g" >"$work/out9i" 2>"$work/err9i" &
 wpid=$!
 for _ in $(seq 100); do grep -q 'killing it' "$log" 2>/dev/null && break; sleep 0.1; done
