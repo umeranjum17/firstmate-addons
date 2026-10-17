@@ -10,6 +10,15 @@ instead lands in a later PR. Until that swap this directory is dormant, and
 every moved byte below is identical to the fork copy the live guard runs
 today.
 
+## Thin layer (slice 1)
+
+`bin/fm-supervisor-work-thin.sh` is the thin guard. It runs the three rules in
+`bin/fm-supervisor-work-thin-policy.mjs` and takes the primary-home scope and the
+shell lexer from the Firstmate checkout named by `FM_CODE_ROOT`, so it carries no
+copied upstream lines and fails open when that checkout is unset. Its behavior
+test is `tests/fm-supervisor-work-thin.test.sh`, which runs against the pinned
+upstream commit. The verbatim copies below are removed in the next slice.
+
 ## Layout
 
 - `bin/fm-supervisor-work-pretool-check.sh` — the hook transport: scopes the
@@ -56,7 +65,7 @@ tree beside it (see the proof below).
 
 Every moved file was compared byte for byte (sha256 plus file mode)
 against its fork source at
-`umeranjum17/firstmate@0689b4b9d9ab3594f846cfe07c400edfa58244bf` at move
+`<fork-owner>/firstmate@0689b4b9d9ab3594f846cfe07c400edfa58244bf` at move
 time:
 
 | moved file | fork source | sha256 |
