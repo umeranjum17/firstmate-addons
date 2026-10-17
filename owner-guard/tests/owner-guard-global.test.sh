@@ -100,6 +100,15 @@ i=0; while [ "$i" -lt 1000 ]; do git -C "$d/plain" branch "b$i" >/dev/null; i=$(
 plain git push -q "$d/big.git" --all
 check "big push to an early-exit pre-receive passes" "$?" 0
 
+# Both chained post-rewrite consumers get git's rewritten-commit lines.
+printf '#!/bin/sh\ncat >>%q\n' "$d/rw.log" >"$d/prevhooks/post-rewrite"
+printf '#!/bin/sh\ncat >>%q\n' "$d/rw.log" >"$d/plain/.git/hooks/post-rewrite"
+chmod +x "$d/prevhooks/post-rewrite" "$d/plain/.git/hooks/post-rewrite"
+: >"$d/rw.log"
+plain git -C "$d/plain" -c user.name=You -c user.email=$ME commit -q --amend -m 'clean commit'
+check "both chained post-rewrite consumers fed" "$(grep -c . "$d/rw.log")" "2"
+check "post-rewrite replay identical to both" "$(sort -u "$d/rw.log" | wc -l)" "1"
+
 # Lane env still refuses: the command-scope hooksPath wins over global, one verdict.
 git clone -q "$d/origin.git" "$d/clone"
 git -C "$d/clone" worktree add -q -b lane "$d/wt" origin/main
