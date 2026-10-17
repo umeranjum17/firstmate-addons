@@ -326,6 +326,30 @@ test_milestone_fields_render_on_the_strip_and_the_cards() {
   pass "milestone fields render on the strip and the cards, and image evidence shows"
 }
 
+# A repo that arrives as a path renders as its last segment everywhere a repo
+# name is shown, so no home path reaches the captain; a plain name is untouched.
+test_a_repo_given_as_a_home_path_shows_only_its_last_segment() {
+  local home data out
+  home=$(make_home repo-label)
+  data=$(valid_payload "$home")
+  jq '.projects[0].repo = "/home/umer/sample/"
+    | .captains_call[0].repo = "/homes/umer/sample"
+    | .underway[0] |= del(.age)
+    | .underway[0].repo = "/home/umer/sample"
+    | .landed[0].repo = "/home/umer/sample"
+    | .charted[0].repo = "/home/umer/sample"' "$data" > "$home/paths.json"
+  run_board "$home" build "$home/paths.json" >/dev/null || fail "the build failed"
+  out=$(node "$HARNESS" "$(board_of "$home")") || fail "the built board could not be rendered"
+  printf '%s' "$out" | jq -e '
+    .projects[0].repo == "sample"
+    and .calls[0].repo == "sample"
+    and (.underway[0].sub | endswith(" · sample"))
+    and .landed[0].sub == "sample · lead"
+    and .charted[0].sub == "queued · sample"
+  ' >/dev/null || fail "a repo given as a home path was not reduced to its last segment: $out"
+  pass "a repo given as a home path shows only its last segment"
+}
+
 test_path_is_home_scoped_and_needs_fm_home
 test_malformed_payloads_are_refused_and_the_board_is_left_alone
 test_build_injects_the_payload_binds_then_arms
@@ -337,3 +361,4 @@ test_build_refuses_to_arm_when_the_session_stays_ended
 test_rebuild_refreshes_in_place_without_arming_twice
 test_a_template_without_exactly_one_data_slot_is_refused
 test_milestone_fields_render_on_the_strip_and_the_cards
+test_a_repo_given_as_a_home_path_shows_only_its_last_segment

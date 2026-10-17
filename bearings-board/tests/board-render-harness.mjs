@@ -133,6 +133,7 @@ const calls = deck.children
   .filter((c) => c.className.includes("bb-decision"))
   .map((card) => ({
     key: findAll(card, "bb-opts")[0]?.parentNode.attributes["data-lavish-question"] ?? "",
+    repo: findAll(card, "bb-decision__repo")[0]?.textContent ?? "",
     ctx: findAll(card, "bb-ctx__row").map((r) => ({ k: textOf(r, "bb-ctx__k"), v: textOf(r, "bb-ctx__v") })),
     options: findAll(card, "bb-opt").map((o) => ({
       value: o.children.find((c) => c.tagName === "input")?.value ?? "",
