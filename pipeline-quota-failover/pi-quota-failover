@@ -151,13 +151,13 @@ drop_session() {
 # once it writes no stdout and no stderr for idle_secs. Sets idle_killed=1 when it did that kill.
 run_watched() {
   local pid sizes seen='' last now g s
-  idle_killed=0
+  idle_killed=0 stop_sig=0
   set -m
   "$real_pi" "$@" <"$stdin_file" >"$out_file" 2>"$err_file" &
   pid=$!
   set +m
-  trap 'kill -INT -- "-$pid" 2>/dev/null' INT
-  trap 'kill -TERM -- "-$pid" 2>/dev/null' TERM
+  trap 'stop_sig=1; kill -INT -- "-$pid" 2>/dev/null' INT
+  trap 'stop_sig=1; kill -TERM -- "-$pid" 2>/dev/null' TERM
   last=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
@@ -250,7 +250,9 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
   run_watched "${args[@]}"
   rc=$?
   t1=$(date +%s%3N)
-  if [ "$idle_killed" = 1 ]; then
+  if [ "$stop_sig" = 1 ]; then
+    quota=0
+  elif [ "$idle_killed" = 1 ]; then
     quota=1
     detail="no output for ${idle_secs}s"
   else
@@ -263,7 +265,7 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
   fi
   if [ "$quota" = 0 ]; then
     # Only a real answer clears the route's marker; a kill, a timeout or any other failure keeps it.
-    if [ "$rc" = 0 ] && [ -z "$(error_text 0)" ]; then
+    if [ "$stop_sig" = 0 ] && [ "$rc" = 0 ] && [ -z "$(error_text 0)" ]; then
       rm -f "$(marker "$model")"
     fi
     # Not a quota failure: hand the pipeline exactly what real pi produced.

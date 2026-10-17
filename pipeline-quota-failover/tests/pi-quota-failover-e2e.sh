@@ -56,6 +56,7 @@ for a in "$@"; do
 done
 case $model in
   bad/hang) sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
+  bad/grace) trap 'sleep 2; exit 143' TERM; while :; do sleep 1; done ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
 printf '%s\n' '{"type":"session","id":"s-1"}'
@@ -339,6 +340,19 @@ rc=$?
 is "INT to a silent wrapper exits with pi's status" "$rc" "130"
 if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "INT stopped the silent pi promptly"; else no "INT to a silent wrapper took $(($(date +%s) - t0))s"; fi
 is "no failover after INT" "$(wc -l <"$STUB_ARGV")" "1"
+
+# 9i. TERM to the wrapper during the idle-kill grace window (pi ignores TERM for 2s after going silent) stops the
+# call: no failover to the next model, pi's status passes through.
+nodead
+: >"$STUB_ARGV" >"$log"
+PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/grace claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/grace --mode json --no-session <"$work/prompt9g" >"$work/out9i" 2>"$work/err9i" &
+wpid=$!
+for _ in $(seq 100); do grep -q 'killing it' "$log" 2>/dev/null && break; sleep 0.1; done
+kill -TERM "$wpid"
+wait "$wpid"
+rc=$?
+is "TERM during the idle-kill grace exits with pi's status" "$rc" "143"
+is "no failover after TERM in the idle-kill grace" "$(wc -l <"$STUB_ARGV")" "1"
 
 # 9d. A call killed from outside (not a quota error) keeps the route's existing marker and passes its exit through.
 nodead
