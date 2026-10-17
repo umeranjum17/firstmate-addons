@@ -96,11 +96,11 @@ mark_dead() {
   mkdir -p "$dead_dir" 2>/dev/null
   printf '%s %s\n' "$1" "$(date +%s)" >"$(marker "$1")" 2>/dev/null
 }
-# quota_exhausted <model>: quota-axi reports exhausted_now for the route's provider (the part before the slash).
-# Missing, slow (10s cap) or failing quota-axi answers no, so the route is tried as before.
+# quota_exhausted <model>: quota-axi reports exhausted_now for this model's provider with scope all_models or model:<id>.
+# Missing, slow (10s cap), failing or unparseable quota-axi answers no, so the route is tried as before.
 quota_exhausted() {
   timeout 10 quota-axi --provider "${1%%/*}" --json --max-age 5m --no-credential-refresh 2>/dev/null \
-    | grep -q '"status": *"exhausted_now"'
+    | jq -e --arg p "${1%%/*}" --arg s "model:${1#*/}" '[.providers[]? | select(.provider == $p) | .quotaSemantics.effectiveAvailability[]? | select((.scope == "all_models" or .scope == $s) and .runway.status == "exhausted_now")] | length > 0' >/dev/null 2>&1
 }
 idle_secs=${PI_QUOTA_FAILOVER_IDLE_SECS:-300}
 
