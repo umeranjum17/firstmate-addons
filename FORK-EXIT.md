@@ -8,7 +8,8 @@ add-on when it can; a fork patch only when it cannot — and it joins this list 
 Exit paths: **add-on** `<dir>` (move to firstmate-addons) · **offer to Kun** (upstream fix,
 only with the owner's approval) · **stays** (thin hook or fork-only policy, nothing to move).
 Statuses: **on fork** · **moved to** add-on + fork shim · **dormant copy** (add-on holds a
-verbatim copy; the fork still runs its own) · **done**.
+verbatim copy; the fork still runs its own) · **done** · **dropped** (add-on removed; the fork
+copy still runs until a later fork PR drops it).
 
 ## How to add a row
 
