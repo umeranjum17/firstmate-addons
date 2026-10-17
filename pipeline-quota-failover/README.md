@@ -12,9 +12,10 @@ Fail-open cases (the route is tried as before, one log line says so):
 
 - `quota-axi` is missing, exits non-zero (for example `error: unsupported provider: claude-bridge`) or takes longer than 10s.
 - `jq` is not installed; the pre-check is off for every route.
-- The answer is not parseable JSON.
+
+An answer that is not parseable JSON is treated as not exhausted, without a log line.
 
 ## Idle watchdog
 
-A pi call that writes no stdout and no stderr for `PI_QUOTA_FAILOVER_IDLE_SECS` (default 300) is killed (TERM, then KILL
-after a grace) and counts as a quota failure. SIGINT and SIGTERM sent to the wrapper are forwarded to pi.
+A pi call that writes no stdout and no stderr for `PI_QUOTA_FAILOVER_IDLE_SECS` (default 300) is killed with its process
+group (TERM, then KILL after a grace) and counts as a quota failure. SIGINT and SIGTERM sent to the wrapper are forwarded to pi's process group, so commands pi started are signalled too.
