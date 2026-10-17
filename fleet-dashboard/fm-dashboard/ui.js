@@ -45,7 +45,7 @@ export const askOrder = (asks, newest = true) => {
   const dated = asks.filter(a => a.age != null).sort((a, b) => newest ? a.age - b.age : b.age - a.age)
   return [...dated, ...asks.filter(a => a.age == null)]
 }
-export const sorted = cs =>[...cs].sort((a, b) => a.stage === 'landed' && b.stage === 'landed' ? b.since - a.since : rank(a) - rank(b) || (a.since || 9e9) - (b.since || 9e9))
+export const sorted = cs => [...cs].sort((a, b) => a.stage === 'landed' && b.stage === 'landed' ? b.since - a.since : rank(a) - rank(b) || (a.since || 9e9) - (b.since || 9e9))
 // A waiting lane's age is its time in that wait, any other lane's its time in stage.
 export const age = c => c.wait_since && c.wait ? now() - c.wait_since : c.since ? now() - c.since : null
 
