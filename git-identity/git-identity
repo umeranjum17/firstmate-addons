@@ -11,9 +11,10 @@
 #       commits, while git -c, GIT_AUTHOR_* and every other repo the lane touches (test fixtures) keep their identity.
 #   git-identity hook <name> [args...]
 #       Run by hooks/<name>. pre-push refuses when any pushed commit not already on a remote has an author or
-#       committer email other than identity.gitconfig's user.email. Every hook then runs the repository's own hook
+#       committer email other than identity.gitconfig's user.email, or when a pushed commit cannot be inspected.
+#       Every hook then runs the repository's own hook
 #       of that name (core.hooksPath without our include, else $GIT_DIR/hooks), pre-push with the same stdin.
-set -u
+set -u -o pipefail
 unset CDPATH
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 CONF=$HERE/identity.gitconfig
@@ -44,7 +45,8 @@ bad_commits() {
     case "$lsha" in *[!0]*) ;; *) continue ;; esac # branch delete
     not=(--not --remotes)
     case "$rsha" in *[!0]*) git cat-file -e "$rsha^{commit}" 2>/dev/null && not+=("$rsha") ;; esac
-    git log --format='%h%x09%ae%x09%ce%x09%an%x09%cn%x09%s' "$lsha" "${not[@]}" --
+    git log --format='%h%x09%ae%x09%ce%x09%an%x09%cn%x09%s' "$lsha" "${not[@]}" -- ||
+      { echo "git-identity: cannot inspect pushed commits" >&2; exit 1; }
   done | while IFS=$'\t' read -r h ae ce an cn s; do
     [ "${ae,,}" = "$allowed" ] && [ "${ce,,}" = "$allowed" ] ||
       printf '  %s  author=%s <%s>  committer=%s <%s>  %s\n' "$h" "$an" "$ae" "$cn" "$ce" "$s"

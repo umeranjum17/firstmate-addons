@@ -92,7 +92,18 @@ check "push of captain commits on a forge-made base passes" "$rc" 0
 check "forge-made commit is in the pushed history" "$(git -C "$d/origin.git" log -1 --format=%ce lane~1)" noreply@github.com
 has "repo's own pre-push hook ran with git's stdin" "$(cat "$d/repo-hook.log" 2>/dev/null)" "refs/heads/lane $(git -C "$WT" rev-parse HEAD) refs/heads/lane"
 
-# (d) A repository outside the lane's clone (a test fixture) keeps its identity and pushes freely.
+# (d) A pushed commit whose inspection fails (its object is gone, as when gc prunes it mid-walk) refuses the push
+# instead of letting it through unchecked. The hook interface is driven directly: git rewrites PATH for hooks, so
+# the failure is produced with a real missing object rather than a shimmed git.
+git -C "$WT" -c user.name=t -c user.email=t@e.c commit -q --allow-empty -m uninspectable
+missing=$(printf x | git hash-object --stdin)
+out=$(lane "$XDG_DATA_HOME/fm-git-identity/git-identity" hook pre-push \
+  <<<"refs/heads/lane $missing refs/heads/lane $(git -C "$d/origin.git" rev-parse refs/heads/lane)" 2>&1) && rc=0 || rc=$?
+check "an inspection failure refuses the push" "$rc" 1
+has "refusal names the uninspectable push" "$out" "cannot inspect pushed commits"
+git -C "$WT" reset -q --hard HEAD~1
+
+# (e) A repository outside the lane's clone (a test fixture) keeps its identity and pushes freely.
 git init -q --bare "$d/fx.git"
 git init -q "$d/fx"
 git -C "$d/fx" config user.email t@t
@@ -102,7 +113,7 @@ check "fixture repo keeps its own identity" "$(git -C "$d/fx" log -1 --format=%a
 lane git -C "$d/fx" push -q "$d/fx.git" HEAD:refs/heads/main && rc=0 || rc=$?
 check "fixture push is not checked" "$rc" 0
 
-# (e) The allowed identity is settable: a captain commit is refused under another configured email.
+# (f) The allowed identity is settable: a captain commit is refused under another configured email.
 "$SRC/install.sh" --email other@example.com "$FM" >/dev/null
 lane git commit -q --allow-empty -m 'after email change'
 check "--email changes the pinned identity" "$(git -C "$WT" log -1 --format=%ae)" other@example.com
