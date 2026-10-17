@@ -14,6 +14,9 @@
 # --session resume dropping the session on failover, quota-dead markers (written
 # on a quota error, the model skipped while fresh, tried again once expired,
 # cleared by an answer), plain passthrough keeping stdin flowing, and install.sh's key-level config edit in a throwaway config.
+# Also covers the quota-axi pre-check (a stub quota-axi: exhausted_now skips the route without a pi call, a failing
+# quota-axi still calls it), the idle watchdog (a silent stub is killed after a short IDLE_SECS and fails over), and
+# a call killed from outside keeping its marker.
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
@@ -51,6 +54,10 @@ for a in "$@"; do
   [ "$prev" = "--model" ] && model=$a
   prev=$a
 done
+case $model in
+  bad/hang) exec sleep 600 ;;
+  zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
+esac
 printf '%s\n' '{"type":"session","id":"s-1"}'
 printf '%s\n' "{\"type\":\"attempt\",\"model\":\"$model\"}"
 case $model in
@@ -77,8 +84,26 @@ esac
 STUB
 chmod +x "$stub/pi"
 
+# The stub quota-axi: each call is one line in $STUB_QUOTA_LOG; providers named in $STUB_QUOTA_EXHAUSTED (comma
+# list) report exhausted_now, $STUB_QUOTA_FAIL makes it exit 1.
+cat >"$stub/quota-axi" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$STUB_QUOTA_LOG"
+[ -z "${STUB_QUOTA_FAIL:-}" ] || { echo 'quota-axi: vendor unreachable' >&2; exit 1; }
+p=''
+prev=''
+for a in "$@"; do
+  [ "$prev" = "--provider" ] && p=$a
+  prev=$a
+done
+status=known
+case ",${STUB_QUOTA_EXHAUSTED:-}," in *",$p,"*) status=exhausted_now ;; esac
+printf '{"providers":[{"provider":"%s","quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","runway":{"status":"%s"}}]}}]}\n' "$p" "$status"
+STUB
+chmod +x "$stub/quota-axi"
+
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
-export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv
+export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
 export HOME="$home" XDG_STATE_HOME="$work/state"
 PATH="$stub:$PATH"
 prompt='Reply with the single word PONG.'
@@ -209,6 +234,50 @@ OUT=$(printf '%s' "$prompt" | GATE_SLEEP=5 PI_QUOTA_FAILOVER_GATE="$stub/gate" P
 is "bounded gate wait still runs pi" "$?" "0"
 out_has "pi answered after the bound" "PONG"
 log_has "bound logged" "memory gate still waiting after 1s; starting pi anyway"
+
+# 9. quota-axi reports the route's provider exhausted_now: the route is skipped without a pi call, its marker written.
+nodead
+: >"$STUB_ARGV"
+: >"$STUB_QUOTA_LOG"
+OUT=$(printf '%s' "$prompt" | STUB_QUOTA_EXHAUSTED=zai "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err9")
+is "exhausted route call exits 0" "$?" "0"
+out_has "exhausted route answers from Haiku 5.5" '"model":"claude-bridge/claude-haiku-5-5"'
+is "exhausted glm never called" "$(grep -c 'zai/glm' "$STUB_ARGV")" "0"
+is "Haiku 5.5 called once" "$(wc -l <"$STUB_ARGV")" "1"
+log_has "exhausted skip logged" "model=zai/glm-5.3-flash skipped: quota-axi reports exhausted_now"
+fresh "exhausted route gets a dead marker" zai/glm-5.3-flash
+is "quota-axi asked for the glm provider" "$(grep -c -- '--provider zai ' "$STUB_QUOTA_LOG")" "1"
+
+# 9b. quota-axi failing: the route is still called as before, and its quota error fails over as usual.
+nodead
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | STUB_QUOTA_FAIL=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err9b")
+is "failing quota-axi: failover exits 0" "$?" "0"
+is "failing quota-axi: glm still called first" "$(sed -n 1p "$STUB_ARGV")" "--model zai/glm-5.3-flash --mode json --no-session"
+out_has "failing quota-axi: Haiku 5.5 answers" '"model":"claude-bridge/claude-haiku-5-5"'
+
+# 9c. A silent pi (stub hangs with no output) is killed after IDLE_SECS and counts as a quota failure: the next
+#     chain model answers, and the hung route gets its marker.
+nodead
+: >"$log"
+t0=$(date +%s)
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session 2>"$work/err9c")
+is "silent hang exits 0" "$?" "0"
+out_has "silent hang fails over to Haiku 5.5" '"model":"claude-bridge/claude-haiku-5-5"'
+log_has "idle kill logged" "pi produced no output for 2s; killing it"
+log_has "idle kill moves on to Haiku 5.5" "model=bad/hang quota-error.*no output for 2s.*moving to claude-bridge/claude-haiku-5-5"
+if [ $(($(date +%s) - t0)) -lt 10 ]; then ok "silent hang failed over in under 10s"; else no "silent hang took $(($(date +%s) - t0))s"; fi
+fresh "hung route gets a dead marker" bad/hang
+
+# 9d. A call killed from outside (not a quota error) keeps the route's existing marker and passes its exit through.
+nodead
+: >"$log"
+backdate zai/glm-5.3-flash
+before=$(cat "$dead/zai%glm-5.3-flash")
+OUT=$(printf '%s' "$prompt" | STUB_GLM_KILL=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err9d")
+rc=$?
+is "killed attempt exits with its status" "$rc" "143"
+is "killed attempt keeps the glm marker" "$(cat "$dead/zai%glm-5.3-flash")" "$before"
 
 # 8. install.sh: key-level config edit in a throwaway config, never printing it.
 cfg=$work/config.yaml
