@@ -24,6 +24,7 @@ One line per add-on, with how it wires in. `<home>` is your home folder for the 
 - `merge-card` — runs the merge gate and posts one evidence card per merge to the sign-off board. Wire in: config shims, see Install.
 - `merge-on-green` — merges a PR you allowed to auto-merge once its checks are green and its proof receipt passes. Wire in: `merge-on-green/install.sh <home>`.
 - `nm-drain` — updates the shared pipeline service through a planned drain, never over live runs. Wire in: `nm-drain/install.sh <home>`.
+- `owner-guard` — refuses a commit or push whose added lines match the home's private owner-details patterns; a refusal is final. Wire in: `owner-guard/install.sh <home>`.
 - `parked-homes` — a paused team home gets no messages, nudges, relaunches or config pushes. Needs fork hooks (FORK-EXIT.md).
 - `pipeline-literal-delete` — gives pipeline agents the safe recursive-delete rule in their own instructions. Wire in: `pipeline-literal-delete/install.sh`.
 - `pipeline-quota-failover` — moves pipeline model calls to the next model in the chain on a quota error. Wire in: `pipeline-quota-failover/install.sh`.
