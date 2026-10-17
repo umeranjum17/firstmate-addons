@@ -61,6 +61,7 @@ missing "plain pattern stays off stdout" "$out" "scane2e-fake-surname"
 rep=$(printf '%s' "$out" | sed -n 's/.*full file:line report: //p')
 check "report path sits under the home data dir" "${rep#"$FM"/data/owner-details-scan/}" "$(basename "$rep")"
 check "report file exists" "$(test -f "$rep" && echo yes || echo no)" yes
+check "report is owner-only" "$(stat -c %a "$rep")" 600
 has "report holds the first file:line" "$(cat "$rep")" "hit-details.txt:1"
 has "report holds the second file:line" "$(cat "$rep")" "hit-more.txt:1"
 

@@ -11,6 +11,7 @@
 # unconfigured, or when no finished scan is waiting. The patterns themselves
 # are never printed.
 set -u -o pipefail
+umask 077 # the run dir, the copied patterns, the report and the result file stay owner-only
 M=${FM_MAIN_HOME:-$HOME/firstmate}
 MARK=$M/state/.owner-details-scan.last
 RES=$M/state/.owner-details-scan.result
