@@ -190,7 +190,7 @@ test_overview_answers_the_four_questions_with_sums_that_add_up() {
   printf 'first\t%s\tApprove the release\thttps://example.invalid/release\nsecond\t%s\tChoose a date\t\n' \
     "$((now - 7200))" "$((now - 3600))" > "$home/data/captain-asks.tsv"
   build "$home"
-  has "$d/index.html" "2 things need you. Newest first Oldest first All Yes/no Pick Approval yes/no Choose a date 1 h approval Approve the release 2 h"
+  has "$d/index.html" "2 things need you. Newest first Oldest first All Yes/no Pick Approval pick Choose a date 1 h approval Approve the release 2 h"
   grep -q 'href="https://example.invalid/release"' "$d/index.html" || fail "ask URL not linked"
   # A blank row, or one without an id or text, is not an ask; a real ask with a bad time still counts.
   printf '\nbad row\n\t%s\tNo id\t\nfourth\t%s\t\t\nfifth\tsoon\tFix the time\t\n' "$now" "$now" >> "$home/data/captain-asks.tsv"
@@ -219,6 +219,18 @@ test_waiting_on_you_is_newest_first_with_a_type_tag_and_filter() {
   grep -q 'class="item k-pick" style="--n:1;--o:1"' "$d/index.html" || fail "the pick ask is not ranked 1 newest and 1 oldest"
   grep -q 'class="item k-approval" style="--n:2;--o:0"' "$d/index.html" || fail "the approval ask is not ranked 2 newest and 0 oldest"
   pass "waiting on you lists newest first, tags each ask by type, and carries the sort and filter hooks"
+}
+
+test_waiting_on_you_types_follow_the_wording() {
+  local home d now
+  home=$(make_home asktypes)
+  d="$home/state/dashboard"
+  now=$(date +%s)
+  printf 'a\t%s\tPick a date\t\nb\t%s\tChoose a date\t\nc\t%s\tHas CI approved the deploy?\t\nd\t%s\tTry step 3) tomorrow\t\n' \
+    "$((now - 400))" "$((now - 300))" "$((now - 200))" "$((now - 100))" > "$home/data/captain-asks.tsv"
+  build "$home"
+  has "$d/index.html" "pick Pick a date" "pick Choose a date" "approval Has CI approved the deploy?" "yes/no Try step 3) tomorrow"
+  pass "pick, choose and approved wording tag as pick and approval, and a single step marker in prose stays yes/no"
 }
 
 test_backlog_and_method_pages_show_their_numbers() {
@@ -564,6 +576,7 @@ const asks = [{ text: 'Approve the merge', age: 7200 }, { text: 'Pick a layout: 
 assert.deepEqual(ui.askOrder(asks).map(a => a.text), ['Is the date right?', 'Pick a layout: 1) blue 2) red', 'Approve the merge', 'Fix the time'])
 assert.deepEqual(ui.askOrder(asks, false).map(a => a.text), ['Approve the merge', 'Pick a layout: 1) blue 2) red', 'Is the date right?', 'Fix the time'])
 assert.deepEqual(asks.map(a => ui.askType(a.text)), ['approval', 'pick', 'yn', 'yn'])
+assert.deepEqual(['Pick a date', 'Choose a date', 'Has CI approved the deploy?', 'Try step 3) tomorrow'].map(ui.askType), ['pick', 'pick', 'approval', 'yn'])
 const note = text => ({ verb: 'Waiting', stage: 'review', text, at: 1 })
 const prefix = 'Waiting for approval of the production deployment configuration in '
 assert.equal(board.squash([note(prefix + 'production'), note(prefix + 'staging')]).length, 2)
@@ -962,6 +975,7 @@ test_review_evidence_boundaries
 test_overview_answers_the_four_questions_with_sums_that_add_up
 test_backlog_and_method_pages_show_their_numbers
 test_waiting_on_you_is_newest_first_with_a_type_tag_and_filter
+test_waiting_on_you_types_follow_the_wording
 test_fleet_past_twenty_mates_keeps_every_lead_row
 test_board_json_feeds_the_app
 test_ship_view_loads_against_the_app

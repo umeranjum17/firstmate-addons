@@ -1166,9 +1166,9 @@ def unknown_foot(*sources):
 
 # --- overview ------------------------------------------------------------
 ASK_TAG = {'yn': 'yes/no', 'pick': 'pick', 'approval': 'approval'}
-def ask_type(text):  # listed options = pick; approve or merge wording = approval; else yes/no
-    if re.search(r'\boptions?\b|(?:^|\s)\(?[1-9a-h]\)', text, re.I): return 'pick'
-    if re.search(r'\b(?:approve|approval|merge)\b', text, re.I): return 'approval'
+def ask_type(text):  # pick: a pick/choose/which verb, the word options, or two option markers; approval: approv*/merg*; else yes/no
+    if re.search(r'\b(?:pick|choose|which)\b|\boptions?\b', text, re.I) or len(re.findall(r'(?:^|\s)\(?[1-9a-h]\)', text, re.I)) >= 2: return 'pick'
+    if re.search(r'\b(?:approv|merg)\w*', text, re.I): return 'approval'
     return 'yn'
 # Sort and filter are CSS-only (the page has no script): hidden radios sit before the list and the
 # rules below read their state. Each ask carries its newest-first rank (--n) and oldest-first rank (--o).
