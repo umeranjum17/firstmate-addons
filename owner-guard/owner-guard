@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Owner-details guard: refuse a commit or push whose added lines match any
+# pattern in the home's private config/owner-details-patterns. A refusal is
+# final: no bypass flag, no env skip. Usage: owner-guard pre-commit |
+# owner-guard pre-push (pre-push reads git's ref lines on stdin).
+set -u -o pipefail
+unset CDPATH
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+
+# Patterns path: explicit override; else the lane home when it holds a
+# patterns file; else the home recorded at install (the install dir is per
+# user, so a lane home without a file falls back to the installing home).
+patterns_path() {
+  if [ -n "${OWNER_GUARD_PATTERNS:-}" ]; then printf '%s' "$OWNER_GUARD_PATTERNS"; return; fi
+  local cand=${FM_HOME:-}
+  if [ -z "$cand" ] || [ ! -s "$cand/config/owner-details-patterns" ]; then
+    cand=$(cat "$HERE/home" 2>/dev/null || true)
+  fi
+  printf '%s/config/owner-details-patterns' "$cand"
+}
+
+HOOK=${1:-commit}
+PAT=$(patterns_path)
+TMP=$(mktemp) || exit 1
+trap 'rm -f -- "$TMP"' EXIT
+# One extended regex per line; full-line # comments and blank lines ignored; case-insensitive.
+grep -v '^[[:space:]]*\(#\|$\)' "$PAT" 2>/dev/null >"$TMP" || true
+if [ ! -s "$TMP" ]; then
+  echo "owner-guard: note: no owner-details patterns configured; nothing to protect"
+  exit 0
+fi
+grep -Ei -f "$TMP" </dev/null >/dev/null 2>&1
+rc=$?
+if [ "$rc" -gt 1 ]; then
+  echo "owner-guard: $HOOK refused: the home's config/owner-details-patterns holds an invalid pattern; fix it and retry. This refusal is final." >&2
+  exit 1
+fi
+
+# scan_diff: read a -U0 diff on stdin, print file:line for each added line
+# matching the patterns. Never prints the patterns themselves.
+scan_diff() {
+  local rest='' file='' line=0 content=''
+  while IFS= read -r rest; do
+    case "$rest" in
+    '+++ '*) file=${rest#'+++ '}; case "$file" in '"'*'"') file=${file#'"'}; file=${file%'"'};; esac; file=${file#'b/'} ;;
+    '@@ -'*) content=${rest#*+}; line=${content%%[, ]*} ;;
+    '+'*) [ -n "$file" ] && [ "$file" != /dev/null ] || continue
+      content=${rest#'+'}
+      if printf '%s\n' "$content" | grep -Ei -q -f "$TMP"; then printf '%s:%s\n' "$file" "$line"; fi
+      line=$((line + 1)) ;;
+    esac
+  done
+  return 0
+}
+
+refuse() { # refuse <hook> <hits>: final refusal listing file:line hits only.
+  local n
+  n=$(printf '%s\n' "$2" | grep -c .)
+  {
+    printf 'owner-guard: %s refused: %s added line(s) match protected owner details:\n' "$1" "$n"
+    printf '%s\n' "$2"
+    printf 'fix: replace each detail with a placeholder (you@example.com, ~/firstmate, /home/you) and retry. This refusal is final: there is no bypass.\n'
+  } >&2
+  exit 1
+}
+
+pre_commit() {
+  local hits
+  hits=$(git diff --cached --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ | scan_diff) || true
+  [ -z "$hits" ] || refuse pre-commit "$hits"
+}
+
+default_base() {
+  git symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null ||
+    git rev-parse --verify --quiet refs/remotes/origin/main 2>/dev/null ||
+    git rev-parse --verify --quiet refs/remotes/origin/master 2>/dev/null || true
+}
+
+pre_push() {
+  local _lref lsha _rref rsha base commits c short hits all
+  all=''
+  while read -r _lref lsha _rref rsha; do
+    case "$lsha" in *[!0]*) ;; *) continue ;; esac # branch delete
+    case "$rsha" in
+    *[!0]*)
+      git cat-file -e "$rsha^{commit}" 2>/dev/null ||
+        { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; }
+      commits=$(git rev-list "$rsha..$lsha" -- 2>/dev/null) ||
+        { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; } ;;
+    *)
+      base=$(default_base)
+      [ -n "$base" ] ||
+        { echo "owner-guard: push refused: cannot find the remote default branch for a new branch" >&2; exit 1; }
+      commits=$(git rev-list "$base..$lsha" --not --remotes -- 2>/dev/null) ||
+        { echo "owner-guard: push refused: cannot inspect pushed commits" >&2; exit 1; } ;;
+    esac
+    for c in $commits; do
+      short=$(git rev-parse --short "$c" 2>/dev/null || printf '%s' "$c")
+      hits=$(git diff-tree --no-commit-id --unified=0 -m -r --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ "$c" -- 2>/dev/null | scan_diff) || true
+      [ -z "$hits" ] || all="$all$(printf '%s\n' "$hits" | sed "s/\$/ (commit $short)/")
+"
+    done
+  done
+  [ -z "$all" ] || refuse pre-push "$(printf '%s' "$all" | awk '!seen[$0]++')"
+}
+
+case "${1:-}" in
+pre-commit) pre_commit ;;
+pre-push) pre_push ;;
+*) echo "usage: owner-guard pre-commit | pre-push" >&2; exit 2 ;;
+esac

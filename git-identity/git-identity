@@ -73,6 +73,18 @@ EOF
       exit 1
     fi
   fi
+  # Add-on hook extensions (e.g. owner-guard): every executable in hooks.d/<name>/ runs in sorted
+  # order with the same args (pre-push gets the same stdin); a non-zero exit refuses the operation.
+  if [ -d "$HERE/hooks.d/$name" ]; then
+    for ext in "$HERE/hooks.d/$name/"*; do
+      if [ ! -x "$ext" ] || [ ! -f "$ext" ]; then continue; fi
+      if [ "$name" = pre-push ] && [ -n "$input" ]; then
+        printf '%s\n' "$input" | "$ext" "$@" || exit $?
+      else
+        "$ext" "$@" || exit $?
+      fi
+    done
+  fi
   # Drop our include entries from GIT_CONFIG_* so the repository's own core.hooksPath shows through; later entries
   # shift down. Ignore GIT_CONFIG_PARAMETERS like the fork's trailer wrappers do.
   count=${GIT_CONFIG_COUNT:-0}
