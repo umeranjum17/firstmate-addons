@@ -85,11 +85,12 @@ STUB
 chmod +x "$stub/pi"
 
 # The stub quota-axi: each call is one line in $STUB_QUOTA_LOG; providers named in $STUB_QUOTA_EXHAUSTED (comma
-# list) report exhausted_now, $STUB_QUOTA_FAIL makes it exit 1.
+# list) report all_models exhausted_now, $STUB_QUOTA_FAIL makes it exit 1, $STUB_QUOTA_JSON replaces the answer verbatim.
 cat >"$stub/quota-axi" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$STUB_QUOTA_LOG"
 [ -z "${STUB_QUOTA_FAIL:-}" ] || { echo 'quota-axi: vendor unreachable' >&2; exit 1; }
+[ -z "${STUB_QUOTA_JSON:-}" ] || { printf '%s\n' "$STUB_QUOTA_JSON"; exit 0; }
 p=''
 prev=''
 for a in "$@"; do
@@ -247,6 +248,23 @@ is "Haiku 5.5 called once" "$(wc -l <"$STUB_ARGV")" "1"
 log_has "exhausted skip logged" "model=zai/glm-5.3-flash skipped: quota-axi reports exhausted_now"
 fresh "exhausted route gets a dead marker" zai/glm-5.3-flash
 is "quota-axi asked for the glm provider" "$(grep -c -- '--provider zai ' "$STUB_QUOTA_LOG")" "1"
+
+# 9e. quota-axi reports another provider (all_models) and another model of the route's provider exhausted_now: the route
+#     is still called first and answers; the other provider's chain model is never called.
+nodead
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_CHAIN='zai/glm-5.2-test claude-bridge/claude-haiku-5-5' STUB_QUOTA_JSON='{"providers":[{"provider":"claude-bridge","quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","runway":{"status":"exhausted_now"}}]}},{"provider":"zai","quotaSemantics":{"effectiveAvailability":[{"scope":"model:glm-5.3-flash","runway":{"status":"exhausted_now"}}]}}]}' "$wrapper" --model zai/glm-5.2-test --mode json --no-session 2>"$work/err9e")
+is "other provider and model exhausted: exits 0" "$?" "0"
+out_has "other provider and model exhausted: route answers" '"model":"zai/glm-5.2-test"'
+is "other provider and model exhausted: route called once" "$(wc -l <"$STUB_ARGV")" "1"
+is "other provider and model exhausted: Haiku never called" "$(grep -c 'claude-bridge' "$STUB_ARGV")" "0"
+
+# 9f. quota-axi reports the route's own model (model:<id> scope) exhausted_now: the route is skipped without a call.
+nodead
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_CHAIN='zai/glm-5.2-test claude-bridge/claude-haiku-5-5' STUB_QUOTA_JSON='{"providers":[{"provider":"zai","quotaSemantics":{"effectiveAvailability":[{"scope":"model:glm-5.2-test","runway":{"status":"exhausted_now"}}]}}]}' "$wrapper" --model zai/glm-5.2-test --mode json --no-session 2>"$work/err9f")
+is "own model exhausted: Haiku answers" "$(grep -c 'claude-bridge/claude-haiku-5-5' "$STUB_ARGV")" "1"
+is "own model exhausted: route not called" "$(grep -c 'zai/glm-5.2-test' "$STUB_ARGV")" "0"
 
 # 9b. quota-axi failing: the route is still called as before, and its quota error fails over as usual.
 nodead
