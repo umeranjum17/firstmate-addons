@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Daily owner-details scan: shallow-clone (depth 1) the default branch of every
+# fleet public repo and match every line against the Main home's private
+# config/owner-details-patterns (same file format as the hook: one extended
+# regex per line, full-line # comments and blank lines ignored,
+# case-insensitive). Prints ONE wake line naming each repo with hits, its hit
+# count, and the private data/owner-details-scan/ report holding the full
+# file:line hits. Prints nothing when clean, unconfigured, or run in the last
+# 24 h. The patterns themselves are never printed.
+set -u -o pipefail
+M=${FM_MAIN_HOME:-$HOME/firstmate}
+MARK=$M/state/.owner-details-scan.last
+PAT=$M/config/owner-details-patterns
+REPOS=$M/config/owner-guard-repos
+DATA=$M/data/owner-details-scan
+now=$(date +%s)
+[ -f "$MARK" ] && [ $((now - $(stat -c %Y "$MARK"))) -lt 86400 ] && exit 0
+[ -s "$PAT" ] || exit 0
+TMPD=$(mktemp -d) || exit 0
+trap 'rm -rf -- "$TMPD"' EXIT
+grep -v '^[[:space:]]*\(#\|$\)' "$PAT" >"$TMPD/patterns" 2>/dev/null || true
+[ -s "$TMPD/patterns" ] || exit 0
+grep -Ei -f "$TMPD/patterns" </dev/null >/dev/null 2>&1
+rc=$?
+if [ "$rc" -gt 1 ]; then
+  mkdir -p "$M/state"
+  touch "$MARK"
+  echo "owner-details-scan: the patterns file holds an invalid pattern; fix config/owner-details-patterns (patterns stay private)"
+  exit 0
+fi
+: >"$TMPD/repos"
+if [ -s "$REPOS" ]; then
+  grep -v '^[[:space:]]*\(#\|$\)' "$REPOS" >"$TMPD/repos" 2>/dev/null || true
+else
+  if command -v gh-axi >/dev/null 2>&1; then
+    gh-axi repo list --visibility public --limit 100 --json nameWithOwner --jq '.[].nameWithOwner' >"$TMPD/repos" 2>/dev/null || true
+  fi
+  if [ ! -s "$TMPD/repos" ] && command -v gh >/dev/null 2>&1; then
+    gh repo list --visibility public --limit 100 --json nameWithOwner --jq '.[].nameWithOwner' >"$TMPD/repos" 2>/dev/null || true
+  fi
+fi
+mkdir -p "$M/state"
+[ -s "$TMPD/repos" ] || { touch "$MARK"; exit 0; }
+: >"$TMPD/report"
+summary=""
+i=0
+while IFS= read -r entry; do
+  entry=$(printf '%s' "$entry" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  [ -n "$entry" ] || continue
+  case "$entry" in
+  *://*|/*|*.git|git@*) src=$entry; display=$(basename "$entry" .git) ;;
+  *) src="https://github.com/$entry.git"; display=$entry ;;
+  esac
+  [ -n "${display:-}" ] && [ "$display" != / ] && [ "$display" != . ] || display="repo$i"
+  i=$((i + 1))
+  git clone -q --depth 1 "$src" "$TMPD/work/$i" 2>/dev/null || continue
+  hits=$( (cd "$TMPD/work/$i" && grep -rInEi --exclude-dir=.git -f "$TMPD/patterns" . 2>/dev/null | sed 's|^\./||') || true)
+  [ -n "$hits" ] || continue
+  n=$(printf '%s\n' "$hits" | grep -c .)
+  summary="${summary}${summary:+, }$display ($n)"
+  { printf '## %s (%s hit(s))\n' "$display" "$n"; printf '%s\n' "$hits"; } >>"$TMPD/report"
+done <"$TMPD/repos"
+[ -n "$summary" ] || { touch "$MARK"; exit 0; }
+mkdir -p "$DATA"
+report=$DATA/scan-$(date -u +%F).txt
+{ printf '# owner-details-scan %s: file:line hits (matched lines included; keep this report private)\n' "$(date -u +%FT%TZ)"; cat "$TMPD/report"; } >"$report"
+touch "$MARK"
+echo "owner-details-scan: owner details in $summary - full file:line report: $report"

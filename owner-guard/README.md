@@ -25,6 +25,21 @@ pushing the owner's private details to a public repo, shaped like
   matching push refused, removal-only commit passes, the repo's own hook
   still chains. The patterns file is never copied into the repo or a log.
 
+## Daily scan
+
+`scan-check` shallow-clones (depth 1) the default branch of every fleet
+public repo at most once a day and matches every line against the same
+patterns file the hook uses. The repo list is
+`config/owner-guard-repos` under the Main home (one `owner/repo` or clone
+URL per line, full-line `#` comments allowed); when it is missing, the
+account's public repos are listed through the forge CLI instead. A run with
+hits prints one wake line naming each repo with its hit count and the
+private `data/owner-details-scan/` report holding the full `file:line`
+hits; a clean run, a run within 24 h of the last one, or a missing patterns
+file prints nothing. Install with `install-scan.sh [--dry-run] [<home>]`
+(the home defaults to the Main home); `tests/scan-e2e.sh` is the fixture
+proof (one hit repo, one clean repo, made-up patterns only).
+
 ## Placeholders
 
 Replace a refused detail with `you@example.com`, `~/firstmate`, `/home/you`.
