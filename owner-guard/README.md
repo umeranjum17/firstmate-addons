@@ -42,7 +42,11 @@ pushing the owner's private details to a public repo, shaped like
 A refusal only fires when a client-side hook runs: `git commit --no-verify`
 skips the pre-commit check, and a repo-local `core.hooksPath` (for example
 a hook manager) replaces the global wrappers for that repo, so neither is
-caught.
+caught. The no-mistakes pipeline pins a per-worktree `core.hooksPath` and
+pushes with client hooks skipped, so commits the pipeline itself authors
+are unguarded; worker commits are still checked at commit time. Fixture
+evidence for the bypass (made-up values only) is kept with the task
+record, outside this repo.
 
 ## Placeholders
 
