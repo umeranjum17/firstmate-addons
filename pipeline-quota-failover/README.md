@@ -1,0 +1,20 @@
+# pi-quota-failover
+
+Drop-in pi wrapper for the no-mistakes pipeline agent. It runs the real pi and moves to the next chain model when a call hits a quota error or goes silent.
+
+## Quota pre-check
+
+Before each route is called, `quota-axi --provider <prefix> --json` is asked about that route's provider. A route whose
+`effectiveAvailability` has `runway.status` `exhausted_now` for `all_models` or its own `model:<id>` scope is skipped
+without a pi call and gets a quota marker.
+
+Fail-open cases (the route is tried as before, one log line says so):
+
+- `quota-axi` is missing, exits non-zero (for example `error: unsupported provider: claude-bridge`) or takes longer than 10s.
+- `jq` is not installed; the pre-check is off for every route.
+- The answer is not parseable JSON.
+
+## Idle watchdog
+
+A pi call that writes no stdout and no stderr for `PI_QUOTA_FAILOVER_IDLE_SECS` (default 300) is killed (TERM, then KILL
+after a grace) and counts as a quota failure. SIGINT and SIGTERM sent to the wrapper are forwarded to pi.

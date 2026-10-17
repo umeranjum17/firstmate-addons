@@ -86,17 +86,19 @@ chmod +x "$stub/pi"
 
 # The stub quota-axi: each call is one line in $STUB_QUOTA_LOG; providers named in $STUB_QUOTA_EXHAUSTED (comma
 # list) report all_models exhausted_now, $STUB_QUOTA_FAIL makes it exit 1, $STUB_QUOTA_JSON replaces the answer verbatim.
+# claude-bridge is answered with the real quota-axi rejection (it is not a quota-axi provider on this host).
 cat >"$stub/quota-axi" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$STUB_QUOTA_LOG"
 [ -z "${STUB_QUOTA_FAIL:-}" ] || { echo 'quota-axi: vendor unreachable' >&2; exit 1; }
-[ -z "${STUB_QUOTA_JSON:-}" ] || { printf '%s\n' "$STUB_QUOTA_JSON"; exit 0; }
 p=''
 prev=''
 for a in "$@"; do
   [ "$prev" = "--provider" ] && p=$a
   prev=$a
 done
+[ "$p" != claude-bridge ] || { printf '%s\n' 'error: "unsupported provider: claude-bridge"' 'code: VALIDATION_ERROR' 'help[1]: "Supported providers: claude, codex, cursor, copilot, grok, kimi, zai, agy, alibaba, opencode-go, commandcode, minimax, mimo, deepseek, openrouter, elevenlabs, devin"'; exit 2; }
+[ -z "${STUB_QUOTA_JSON:-}" ] || { printf '%s\n' "$STUB_QUOTA_JSON"; exit 0; }
 status=known
 case ",${STUB_QUOTA_EXHAUSTED:-}," in *",$p,"*) status=exhausted_now ;; esac
 printf '{"providers":[{"provider":"%s","quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","runway":{"status":"%s"}}]}}]}\n' "$p" "$status"
@@ -249,22 +251,25 @@ log_has "exhausted skip logged" "model=zai/glm-5.3-flash skipped: quota-axi repo
 fresh "exhausted route gets a dead marker" zai/glm-5.3-flash
 is "quota-axi asked for the glm provider" "$(grep -c -- '--provider zai ' "$STUB_QUOTA_LOG")" "1"
 
-# 9e. quota-axi reports another provider (all_models) and another model of the route's provider exhausted_now: the route
-#     is still called first and answers; the other provider's chain model is never called.
+# 9e. quota-axi reports another model of the route's provider exhausted_now and the chain's second provider as unsupported:
+#     the route is still called first and answers, so the second chain model is never called.
 nodead
 : >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_CHAIN='zai/glm-5.2-test claude-bridge/claude-haiku-5-5' STUB_QUOTA_JSON='{"providers":[{"provider":"claude-bridge","quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","runway":{"status":"exhausted_now"}}]}},{"provider":"zai","quotaSemantics":{"effectiveAvailability":[{"scope":"model:glm-5.3-flash","runway":{"status":"exhausted_now"}}]}}]}' "$wrapper" --model zai/glm-5.2-test --mode json --no-session 2>"$work/err9e")
-is "other provider and model exhausted: exits 0" "$?" "0"
-out_has "other provider and model exhausted: route answers" '"model":"zai/glm-5.2-test"'
-is "other provider and model exhausted: route called once" "$(wc -l <"$STUB_ARGV")" "1"
-is "other provider and model exhausted: Haiku never called" "$(grep -c 'claude-bridge' "$STUB_ARGV")" "0"
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_CHAIN='zai/glm-5.2-test claude-bridge/claude-haiku-5-5' STUB_QUOTA_JSON='{"providers":[{"provider":"zai","quotaSemantics":{"effectiveAvailability":[{"scope":"model:glm-5.3-flash","runway":{"status":"exhausted_now"}}]}}]}' "$wrapper" --model zai/glm-5.2-test --mode json --no-session 2>"$work/err9e")
+is "other model exhausted: exits 0" "$?" "0"
+out_has "other model exhausted: route answers" '"model":"zai/glm-5.2-test"'
+is "other model exhausted: route called once" "$(wc -l <"$STUB_ARGV")" "1"
+is "other model exhausted: Haiku never called" "$(grep -c 'claude-bridge' "$STUB_ARGV")" "0"
 
-# 9f. quota-axi reports the route's own model (model:<id> scope) exhausted_now: the route is skipped without a call.
+# 9f. quota-axi reports the route's own model (model:<id> scope) exhausted_now: the route is skipped without a call, and the
+#     unsupported chain provider is logged as not pre-checked and called.
 nodead
 : >"$STUB_ARGV"
+: >"$log"
 OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_CHAIN='zai/glm-5.2-test claude-bridge/claude-haiku-5-5' STUB_QUOTA_JSON='{"providers":[{"provider":"zai","quotaSemantics":{"effectiveAvailability":[{"scope":"model:glm-5.2-test","runway":{"status":"exhausted_now"}}]}}]}' "$wrapper" --model zai/glm-5.2-test --mode json --no-session 2>"$work/err9f")
 is "own model exhausted: Haiku answers" "$(grep -c 'claude-bridge/claude-haiku-5-5' "$STUB_ARGV")" "1"
 is "own model exhausted: route not called" "$(grep -c 'zai/glm-5.2-test' "$STUB_ARGV")" "0"
+log_has "unsupported provider logged as not pre-checked" "model=claude-bridge/claude-haiku-5-5 not pre-checked"
 
 # 9b. quota-axi failing: the route is still called as before, and its quota error fails over as usual.
 nodead
@@ -286,6 +291,38 @@ log_has "idle kill logged" "pi produced no output for 2s; killing it"
 log_has "idle kill moves on to Haiku 5.5" "model=bad/hang quota-error.*no output for 2s.*moving to claude-bridge/claude-haiku-5-5"
 if [ $(($(date +%s) - t0)) -lt 10 ]; then ok "silent hang failed over in under 10s"; else no "silent hang took $(($(date +%s) - t0))s"; fi
 fresh "hung route gets a dead marker" bad/hang
+
+# 9g. TERM to the wrapper while its pi is silent (idle path) reaches pi: the wrapper exits with pi's status, no failover.
+nodead
+: >"$STUB_ARGV"
+printf '%s' "$prompt" >"$work/prompt9g"
+PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9g" 2>"$work/err9g" &
+wpid=$!
+t0=$(date +%s)
+for _ in $(seq 50); do [ -s "$STUB_ARGV" ] && break; sleep 0.1; done
+kill -TERM "$wpid"
+wait "$wpid"
+rc=$?
+is "TERM to a silent wrapper exits with pi's status" "$rc" "143"
+if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "TERM stopped the silent pi promptly"; else no "TERM to a silent wrapper took $(($(date +%s) - t0))s"; fi
+is "no failover after TERM" "$(wc -l <"$STUB_ARGV")" "1"
+
+# 9h. INT to the wrapper while its pi is silent (idle path) reaches pi: the wrapper exits with pi's status, no failover.
+# Launched under job control so the wrapper does not inherit an ignored SIGINT.
+nodead
+: >"$STUB_ARGV"
+set -m
+PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9h" 2>"$work/err9h" &
+wpid=$!
+set +m
+t0=$(date +%s)
+for _ in $(seq 50); do [ -s "$STUB_ARGV" ] && break; sleep 0.1; done
+kill -INT "$wpid"
+wait "$wpid"
+rc=$?
+is "INT to a silent wrapper exits with pi's status" "$rc" "130"
+if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "INT stopped the silent pi promptly"; else no "INT to a silent wrapper took $(($(date +%s) - t0))s"; fi
+is "no failover after INT" "$(wc -l <"$STUB_ARGV")" "1"
 
 # 9d. A call killed from outside (not a quota error) keeps the route's existing marker and passes its exit through.
 nodead
