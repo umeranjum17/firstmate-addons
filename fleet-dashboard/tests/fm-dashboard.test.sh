@@ -560,6 +560,10 @@ const d = { homes: [{ id: 'main', known: true, ready: 0 }, { id: 'remote', known
 assert.equal(ui.total(d, 0), '≥0'); assert.equal(ui.total(d, 0, 'queued'), '≥0'); assert.equal(ui.total(d, 0, 'landed'), '≥0')
 assert.equal(ui.total(d, 2, 'active', 'main'), 2)
 assert.equal(ui.prNum('https://gitlab.example/team/nested/app/-/merge_requests/27'), '27'); assert.equal(ui.prNum('https://github.com/team/app/pull/28'), '28'); assert.equal(ui.prNum('https://review.example/c/team/app/+/27'), '27')
+const asks = [{ text: 'Approve the merge', age: 7200 }, { text: 'Pick a layout: 1) blue 2) red', age: 3600 }, { text: 'Is the date right?', age: 600 }, { text: 'Fix the time', age: null }]
+assert.deepEqual(ui.askOrder(asks).map(a => a.text), ['Is the date right?', 'Pick a layout: 1) blue 2) red', 'Approve the merge', 'Fix the time'])
+assert.deepEqual(ui.askOrder(asks, false).map(a => a.text), ['Approve the merge', 'Pick a layout: 1) blue 2) red', 'Is the date right?', 'Fix the time'])
+assert.deepEqual(asks.map(a => ui.askType(a.text)), ['approval', 'pick', 'yn', 'yn'])
 const note = text => ({ verb: 'Waiting', stage: 'review', text, at: 1 })
 const prefix = 'Waiting for approval of the production deployment configuration in '
 assert.equal(board.squash([note(prefix + 'production'), note(prefix + 'staging')]).length, 2)
