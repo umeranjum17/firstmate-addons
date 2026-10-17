@@ -90,6 +90,16 @@ printf '#!/bin/sh\nexit 1\n' >"$d/srv.git/hooks/pre-receive"
 out=$(plain git push "$d/srv.git" +HEAD:refuse 2>&1) && rc=0 || rc=$?
 check "refusing bare pre-receive still refuses" "$rc" 1
 
+# A push whose ref lines exceed the pipe buffer still succeeds when the
+# repo's own pre-receive stops reading after one line: the chained hook's
+# verdict decides, not the replay.
+git init -q --bare -b main "$d/big.git"
+printf '#!/bin/sh\nread first\nexit 0\n' >"$d/big.git/hooks/pre-receive"
+chmod +x "$d/big.git/hooks/pre-receive"
+i=0; while [ "$i" -lt 1000 ]; do git -C "$d/plain" branch "b$i" >/dev/null; i=$((i+1)); done
+plain git push -q "$d/big.git" --all
+check "big push to an early-exit pre-receive passes" "$?" 0
+
 # Lane env still refuses: the command-scope hooksPath wins over global, one verdict.
 git clone -q "$d/origin.git" "$d/clone"
 git -C "$d/clone" worktree add -q -b lane "$d/wt" origin/main

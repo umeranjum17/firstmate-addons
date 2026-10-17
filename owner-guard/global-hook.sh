@@ -15,27 +15,32 @@ NAME=__NAME__
 PREV=$(cat "$HERE/prev-hooks-path" 2>/dev/null || true)
 if [ "$NAME" = pre-commit ]; then
   "$HERE/owner-guard" pre-commit "$@" || exit $?
-elif [ "$NAME" = pre-push ]; then
-  INPUT=$(cat)
-  if [ -n "$INPUT" ]; then
-    printf '%s\n' "$INPUT" | "$HERE/owner-guard" pre-push "$@" || exit $?
-  else
-    "$HERE/owner-guard" pre-push "$@" || exit $?
-  fi
 else
-  # Receive hooks feed git's stream only to the chained hooks below: their
-  # stdin is ref lines, not a push range, so the guard must never scan it.
+  # Pre-push and the receive hooks replay git's stream to everything below
+  # (the guard only runs for pre-push): receive stdin is ref lines, not a
+  # push range, so the guard must never scan it. The here-string replay is
+  # byte-identical (cat strips the trailing newline, <<< adds it back) and
+  # lets the consumer's exit status win even when it stops reading early.
   case $NAME in
-  pre-receive|post-receive|proc-receive|reference-transaction) INPUT=$(cat) ;;
+  pre-push|pre-receive|post-receive|proc-receive|reference-transaction)
+    INPUT=$(cat)
+    FED_STDIN=1 ;;
   esac
+  if [ "$NAME" = pre-push ]; then
+    if [ -n "$INPUT" ]; then
+      "$HERE/owner-guard" pre-push "$@" <<<"$INPUT" || exit $?
+    else
+      "$HERE/owner-guard" pre-push "$@" || exit $?
+    fi
+  fi
 fi
 chain() { # chain <hookfile> [args...]: run it when executable and not this wrapper.
   local f=$1
   shift
   [ -n "$f" ] && [ -f "$f" ] && [ -x "$f" ] || return 0
   [ "$f" != "$HERE/hooks/$NAME" ] || return 0
-  if { [ "$NAME" = pre-push ] || [ "$NAME" = pre-receive ] || [ "$NAME" = post-receive ] || [ "$NAME" = proc-receive ] || [ "$NAME" = reference-transaction ]; } && [ -n "${INPUT:-}" ]; then
-    printf '%s\n' "$INPUT" | "$f" "$@" || exit $?
+  if [ -n "${FED_STDIN:-}" ] && [ -n "${INPUT:-}" ]; then
+    "$f" "$@" <<<"$INPUT" || exit $?
   else
     "$f" "$@" || exit $?
   fi
