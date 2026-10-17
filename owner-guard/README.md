@@ -29,13 +29,17 @@ pushing the owner's private details to a public repo, shaped like
 
 `scan-check` shallow-clones (depth 1) the default branch of every fleet
 public repo at most once a day and matches every line against the same
-patterns file the hook uses. The repo list is
+patterns file the hook uses. The clone loop cannot finish inside the
+watcher's timeout, so when a scan is due the check records the run, starts
+the loop detached in the background, and returns at once with no output; a
+finished loop with hits leaves its one wake line under the Main home's
+`state/`, and the next check run prints it once and removes it. The repo list is
 `config/owner-guard-repos` under the Main home (one `owner/repo` or clone
 URL per line, full-line `#` comments allowed); when it is missing, the
-account's public repos are listed through the forge CLI instead. A run with
-hits prints one wake line naming each repo with its hit count and the
+account's public repos are listed through the forge CLI instead. The wake
+line names each repo with its hit count and the
 private `data/owner-details-scan/` report holding the full `file:line`
-hits; a clean run, a run within 24 h of the last one, or a missing patterns
+hits; a clean run, a run with no finished scan waiting, or a missing patterns
 file prints nothing. Install with `install-scan.sh [--dry-run] [<home>]`
 (the home defaults to the Main home); `tests/scan-e2e.sh` is the fixture
 proof (one hit repo, one clean repo, made-up patterns only).

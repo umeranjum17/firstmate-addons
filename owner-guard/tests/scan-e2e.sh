@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Fixture proof for the daily scan: two local bare repos (one holding made-up
-# details, one clean) plus a temp patterns file. The first run wakes with the
-# right counts and writes the private report; the second run within 24 h
-# prints nothing; a clean-only set prints nothing. The raw patterns never
-# reach stdout. Also drives install-scan.sh (dry-run plus a real install).
+# details, one clean) plus a temp patterns file. The due run returns at once
+# with no output and starts the loop detached; a later run prints the wake
+# line with the right counts once and the private report holds them; the run
+# after that prints nothing; a clean-only set prints nothing. The raw patterns
+# never reach stdout. Also drives install-scan.sh (dry-run plus a real install).
 # Usage: owner-guard/tests/scan-e2e.sh
 set -euo pipefail
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -39,7 +40,21 @@ commit_push "$d/clean-push"
 printf '%s\n' "$d/hit.git" "$d/clean.git" >"$FM/config/owner-guard-repos"
 
 out=$("$SRC/scan-check")
-has "first run wakes with the hit repo and count" "$out" "hit (2)"
+check "due scan returns at once with no output" "$out" ""
+check "due scan records the run" "$(test -f "$FM/state/.owner-details-scan.last" && echo yes || echo no)" yes
+wait_result() { # poll until the background loop finishes (result file or lock gone)
+  local end=$(( $(date +%s) + 5 ))
+  while [ ! -f "$FM/state/.owner-details-scan.result" ] && [ ! -d "$FM/state/.owner-details-scan.lock" ] && [ "$(date +%s)" -lt "$end" ]; do
+    sleep 0.2
+  done
+  end=$(( $(date +%s) + 60 ))
+  while [ ! -f "$FM/state/.owner-details-scan.result" ] && [ -d "$FM/state/.owner-details-scan.lock" ] && [ "$(date +%s)" -lt "$end" ]; do
+    sleep 0.2
+  done
+}
+wait_result
+out=$("$SRC/scan-check")
+has "later run wakes with the hit repo and count" "$out" "hit (2)"
 missing "clean repo is not named" "$out" "clean"
 missing "raw patterns stay off stdout" "$out" 'scanprobe[0-9]'
 missing "plain pattern stays off stdout" "$out" "scane2e-fake-surname"
@@ -50,10 +65,13 @@ has "report holds the first file:line" "$(cat "$rep")" "hit-details.txt:1"
 has "report holds the second file:line" "$(cat "$rep")" "hit-more.txt:1"
 
 out=$("$SRC/scan-check")
-check "second run within 24 h prints nothing" "$out" ""
+check "run after the wake prints nothing" "$out" ""
 
 printf '%s\n' "$d/clean.git" >"$FM/config/owner-guard-repos"
 rm -f "$FM/state/.owner-details-scan.last"
+out=$("$SRC/scan-check")
+check "clean scan returns at once with no output" "$out" ""
+wait_result
 out=$("$SRC/scan-check")
 check "clean-only set prints nothing" "$out" ""
 
