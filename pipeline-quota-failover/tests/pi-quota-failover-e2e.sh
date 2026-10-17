@@ -11,8 +11,9 @@
 # logged with timings, and the whole call under 10s; a quota-dead Haiku after
 # glm ends in the terminal "quota exhausted" line, exit 1. Also covers:
 # non-quota (401) passthrough byte-for-byte, pinned-model passthrough, a
-# --session resume dropping the session on failover, plain passthrough keeping
-# stdin flowing, and install.sh's key-level config edit in a throwaway config.
+# --session resume dropping the session on failover, quota-dead markers (written
+# on a quota error, the model skipped while fresh, tried again once expired,
+# cleared by an answer), plain passthrough keeping stdin flowing, and install.sh's key-level config edit in a throwaway config.
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
@@ -81,6 +82,13 @@ export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv
 export HOME="$home" XDG_STATE_HOME="$work/state"
 PATH="$stub:$PATH"
 prompt='Reply with the single word PONG.'
+# Quota-dead markers: cleared before journeys that need every model tried.
+dead=$work/state/pi-quota-failover-dead
+nodead() { rm -f -- "$dead"/*; }
+# age_of <model>: seconds since its marker, or "none".
+age_of() { local at; read -r _ at 2>/dev/null <"$dead/${1//\//%}" && echo $(($(date +%s) - at)) || echo none; }
+backdate() { printf '%s %s\n' "$1" $(($(date +%s) - 3601)) >"$dead/${1//\//%}"; }
+fresh() { local a; a=$(age_of "$2"); if [ "$a" != none ] && [ "$a" -lt 5 ]; then ok "$1"; else no "$1: marker age [$a]"; fi; }
 
 is "default chain is GLM, then Haiku 5.5" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" \
   "zai/glm-5.3-flash claude-bridge/claude-haiku-5-5"
@@ -113,6 +121,7 @@ out_has "pinned stream untouched" '"model":"kimi/k2"'
 if [ "$(grep -c 'moving to' "$log")" = 1 ]; then ok "still one failover line total"; else no "unexpected extra failover lines"; fi
 
 # 4. A resumed session is dropped on the failover attempt only.
+nodead
 : >"$STUB_ARGV"
 OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --session 01234567-89ab-cdef-0123-456789abcdef 2>"$work/err4")
 is "session failover exits 0" "$?" "0"
@@ -125,6 +134,7 @@ is "failover attempt drops the session" "$(sed -n 2p "$STUB_ARGV")" \
 # 5. Default chain exhausted (glm, then a quota-dead Haiku 5.5): each model
 #    once, terminal "quota exhausted", exit 1.
 : >"$log"
+nodead
 OUT=$(printf '%s' "$prompt" | STUB_HAIKU_DEAD=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err5")
 rc=$?
 is "exhausted chain exits 1" "$rc" "1"
@@ -134,6 +144,38 @@ if [ "$(grep -c 'quota-error' "$log")" = 2 ]; then ok "each chain model attempte
 log_has "glm attempt logged" 'model=zai/glm-5.3-flash quota-error'
 log_has "Haiku 5.5 Claude-limit attempt logged" 'model=claude-bridge/claude-haiku-5-5 quota-error.*Claude rate limit'
 log_has "exhaustion logged" "no model left in the chain"
+
+# 5b. Each quota error left a marker holding the model and the time.
+fresh "glm marker written" zai/glm-5.3-flash
+fresh "Haiku marker written" claude-bridge/claude-haiku-5-5
+is "marker names the model" "$(cut -d' ' -f1 "$dead/zai%glm-5.3-flash")" "zai/glm-5.3-flash"
+
+# 5c. Every model inside its window: no pi call at all, terminal line, exit 1.
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err5c")
+is "all-skipped chain exits 1" "$?" "1"
+err_has "all-skipped terminal line" "$work/err5c" "quota exhausted"
+is "no pi call while every marker is fresh" "$(wc -l <"$STUB_ARGV")" "0"
+log_has "skip logged with its window" 'model=zai/glm-5.3-flash skipped: quota error [0-9]*s ago (skip window 3600s)'
+
+# 5d. glm fresh, Haiku's window over: glm is skipped, Haiku runs first with the
+#     session dropped, and its answer clears its marker.
+backdate claude-bridge/claude-haiku-5-5
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --session 01234567-89ab-cdef-0123-456789abcdef 2>"$work/err5d")
+is "skipped-glm call exits 0" "$?" "0"
+out_has "skipped-glm call answers from Haiku" '"model":"claude-bridge/claude-haiku-5-5"'
+is "glm skipped: one pi call, Haiku, no session" "$(cat "$STUB_ARGV")" "--model claude-bridge/claude-haiku-5-5 --mode json"
+is "Haiku answer cleared its marker" "$(age_of claude-bridge/claude-haiku-5-5)" "none"
+
+# 5e. glm's window over: glm is tried again first, and its new quota error
+#     renews the marker.
+backdate zai/glm-5.3-flash
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err5e")
+is "expired-marker call exits 0" "$?" "0"
+is "expired glm tried again first" "$(sed -n 1p "$STUB_ARGV")" "--model zai/glm-5.3-flash --mode json --no-session"
+fresh "glm marker renewed" zai/glm-5.3-flash
 
 # 6. Plain passthrough keeps stdin flowing (prompt reaches the real pi).
 OUT=$(printf '%s' "$prompt" | "$wrapper" --model muse-spark-1.3-contributor --mode json --no-session)
