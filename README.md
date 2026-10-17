@@ -195,6 +195,8 @@ printf '#!/bin/sh\nexec <addons>/merge-card/merge-card post --board <board.json>
 chmod +x $FM_HOME/config/merge-gate $FM_HOME/config/post-merge
 ```
 
+With `owner-guard` installed, rerun `owner-guard/install.sh "$FM_HOME"` after rewriting the gate shim, so the owner-details merge scan is chained back in front of it (see [owner-guard](owner-guard/README.md)).
+
 Test: `merge-card/tests/merge-card-e2e.sh` drives the real script end to end against a task folder holding a retained PNG, with a stub `done-done` placed earlier on `PATH` (one accepting `--citation-base`, one rejecting it, and one that lies about supporting it), and asserts the recorded verdict, the invocation the stub saw, and that the card's media resolves in each case.
 
 ### quota-failover
