@@ -34,7 +34,10 @@ pushing the owner's private details to a public repo, shaped like
   names a global `core.hooksPath` would otherwise hide, so a local bare
   repo's own `pre-receive`/`post-receive` still run, and every stdin-fed
   wrapper replays git's exact input (byte-for-byte, NULs included) to
-  each chained hook. Install is idempotent, records a replaced global
+  each chained hook. The installed copies name bash and the tools they use
+  by absolute path, resolved at install time, so a ref update (for example
+  `git branch`) runs under a PATH that holds only git; the scan refuses by
+  name when grep, sed or another scan tool is not on PATH. Install is idempotent, records a replaced global
   hooksPath instead of dropping it, and `--uninstall` restores it; a
   repo-local `core.hooksPath` is never touched. It also writes the home's
   `config/merge-gate`: the merge scan first, then the home's previous gate
