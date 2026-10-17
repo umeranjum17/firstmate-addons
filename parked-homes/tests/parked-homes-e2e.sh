@@ -320,6 +320,28 @@ fi
 has "parked skip is logged once" "$Q/state/quota-failover.log" "home-b: parked: its home is parked"
 has "unparked move is logged" "$Q/state/quota-failover.log" "home-a: switched"
 
+# --- 9. the reader itself under set -u: remote mate without home=, ship without kind=
+# fm_parked_meta_id runs inside set -u producers (fm-watch.sh, quota-failover), so a
+# meta missing either line must answer silently and correctly, never abort.
+M=$work/meta-probe
+mkdir -p "$work/pconfig"
+printf 't1\n' > "$work/pconfig/parked-homes"
+printf 'kind=secondmate\n' > "$M"          # remote secondmate: no home=, task id stands in
+printf 'worktree=/x\n' > "$M-ship"        # no kind= line at all
+bash -c '
+  set -u
+  . "$1/parked-homes/bin/fm-parked-homes-lib.sh"
+  FM_CONFIG_OVERRIDE=$2   # the override IS the config directory (fork convention)
+  fm_parked_meta "$3" t1 && echo parked || echo not-parked
+  err=$(fm_parked_meta "$4" t2 2>&1)
+  rc=$?
+  if [ "$rc" -ne 0 ] && [ -z "$err" ]; then echo silent; else echo "FAIL rc=$rc err=$err"; fi
+' _ "$addons" "$work/pconfig" "$M" "$M-ship" > "$work/reader.out" 2>&1 \
+  || no "parked-home reader failed under set -u: $(cat "$work/reader.out")"
+is "remote secondmate meta without home= is parked (set -u)" "$(sed -n 1p "$work/reader.out")" "parked"
+is "ship meta without kind= is silently not parked (set -u)" "$(sed -n 2p "$work/reader.out")" "silent"
+lacks "reader under set -u prints no unbound-variable errors" "$work/reader.out" "unbound variable"
+
 if [ "$fails" -eq 0 ]; then
   echo "ALL PASS"
   exit 0

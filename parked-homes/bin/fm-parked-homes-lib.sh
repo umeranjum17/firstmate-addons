@@ -21,7 +21,9 @@
 # home are never parked, whatever their task id spells.
 
 fm_parked_homes_file() {
-  printf '%s\n' "${FM_CONFIG_OVERRIDE:-${FM_HOME:-}}/config/parked-homes"
+  # FM_CONFIG_OVERRIDE is the config directory itself (the fork-wide override
+  # convention); FM_HOME is the home, so its config lives at $FM_HOME/config.
+  printf '%s\n' "${FM_CONFIG_OVERRIDE:-${FM_HOME:-}/config}/parked-homes"
 }
 
 fm_parked_home() {  # <id> -> 0 when parked
@@ -39,7 +41,7 @@ fm_parked_home() {  # <id> -> 0 when parked
 }
 
 fm_parked_meta_id() {  # <meta-file> [task-id] -> home id on stdout
-  local meta=$1 task=${2:-} kind home id
+  local meta=$1 task=${2:-} kind='' home='' id='' line
   [ -f "$meta" ] || return 1
   while IFS= read -r line; do
     case "$line" in
