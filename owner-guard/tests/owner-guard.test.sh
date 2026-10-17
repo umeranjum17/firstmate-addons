@@ -34,6 +34,7 @@ out=$("$SRC/install.sh" "$FM")
 has "install chains the hooks dir" "$out" "hooks.d"
 # shellcheck source=/dev/null
 lane() (cd "$WT" && "$FM/config/launch-env-hook" "$d/env.sh" && . "$d/env.sh" && "$@")
+# shellcheck source=/dev/null
 lanein() (cd "$1" && shift && "$FM/config/launch-env-hook" "$d/env.sh" && . "$d/env.sh" && "$@")
 
 printf 'reach testguard-fake-surname here\n' >"$WT/details.txt"
