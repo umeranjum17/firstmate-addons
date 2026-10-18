@@ -363,12 +363,17 @@ if fm_parked_skip_meta "$G-allowed" home-a config-push > "$work/allowed.out" 2>&
 is "unparked skip gate allows continuation" "$rc" "1"
 is "unparked skip gate is silent" "$(cat "$work/allowed.out")" ""
 # This is the no-op API that the fork shim supplies when the add-on is absent.
-fm_parked_refuse_meta() { return 0; }
-fm_parked_skip_meta() { return 1; }
-fm_parked_refuse_meta "$G" home-b send
-is "absent add-on permits refusal call site" "$?" "0"
-fm_parked_skip_meta "$G" home-b config-push
-is "absent add-on permits skip call site" "$?" "1"
+if bash -c '
+  fm_parked_refuse_meta() { return 0; }
+  fm_parked_skip_meta() { return 1; }
+  fm_parked_refuse_meta absent home-b send || exit 1
+  if fm_parked_skip_meta absent home-b config-push; then exit 1; fi
+  exit 0
+'; then
+  ok "absent add-on permits refusal and skip call sites"
+else
+  no "absent add-on fallbacks refused a call site"
+fi
 
 if [ "$fails" -eq 0 ]; then
   echo "ALL PASS"
