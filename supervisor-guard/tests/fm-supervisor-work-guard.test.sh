@@ -103,6 +103,7 @@ check expect 0 'sleep 1m'
 check expect 2 'sleep 120' "$FMH" supervisor-poll-in-turn
 check expect 2 'sleep 1m30s' "$FMH" supervisor-poll-in-turn
 check expect 2 'sleep "$WAIT"' "$FMH" supervisor-poll-in-turn
+check expect 2 "$(printf 'sle\\\nep 120')" "$FMH" supervisor-poll-in-turn
 
 CHECK_NAME="a for, while or until loop whose body sleeps is denied"
 check expect 2 'for i in $(seq 10); do sleep 5; no-mistakes axi status; done' "$FMH" supervisor-poll-in-turn

@@ -23,6 +23,7 @@ ESCAPED_QUOTE=0
 case $CMD in *'$'\'*|*'$"'*) ESCAPED_QUOTE=1 ;; esac
 if ((ESCAPED_QUOTE == 0)); then
   PLAIN=${CMD//[\"\'\\]/}
+  PLAIN=${PLAIN//$'\n'/}
   case $PLAIN in *no-mistakes*|*sleep*|*herdr*|*tmux*) ;; *) exit 0 ;; esac
 fi
 
