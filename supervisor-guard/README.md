@@ -1,88 +1,44 @@
 # supervisor-guard
 
-The supervisor-work guard — the pre-tool check that stops a supervisor
-session from doing a worker's job — moved **verbatim** out of the Firstmate
-fork into this add-on repository. Nothing calls it from here yet: the fork's
-`bin/fm-supervisor-work-pretool-check.sh` and
-`bin/fm-supervisor-work-command-policy.mjs` stay the live guard every home
-runs through today, and the fork-side hook that will call into this directory
-instead lands in a later PR. Until that swap this directory is dormant, and
-every moved byte below is identical to the fork copy the live guard runs
-today.
+A thin wrapper for the supervisor-work guard: the pre-tool check that stops a
+supervisor session from doing a worker's job. The guard itself is not in this
+add-on. The Firstmate checkout owns it, and this entry point runs that checkout's
+guard with the same arguments, stdin and exit code.
 
 ## Layout
 
-- `bin/fm-supervisor-work-pretool-check.sh` — the hook transport: scopes the
-  guard to a genuine supervisor home, takes the command from a PreToolUse JSON
-  payload on stdin or from `--command`, invokes the policy, and renders the
-  deny/allow verdict. It never executes, sources, evaluates, or expands the
-  command.
-- `bin/fm-supervisor-work-command-policy.mjs` — the single owner of the
-  patterns and the block/allow decision.
-- `tests/fm-supervisor-work-pretool-check.test.sh` — the fork's behavior test
-  for the guard over real fixture homes.
-- `docs/supervisor-work-guard.md` — the human-readable contract and
-  validation record.
+- `bin/fm-supervisor-work-thin.sh` — the wrapper. It resolves the checkout from
+  `FM_CODE_ROOT`, defaulting to `FM_HOME` (the checkout a home runs from), then
+  `exec`s `<checkout>/bin/fm-supervisor-work-pretool-check.sh` unchanged. With no
+  checkout or no executable guard in it, it exits 2 with a message that names
+  `FM_CODE_ROOT`.
+- `tests/fm-supervisor-work-thin.test.sh` — the hermetic wrapper test. It drives
+  the wrapper against a stub checkout in a throwaway directory and checks that
+  arguments, stdin, stderr and exit codes pass through, that `FM_CODE_ROOT` wins
+  over `FM_HOME`, and that a missing guard fails closed.
 
-The transport sources `fm-primary-scope-lib.sh` from its own directory and
-the policy imports the lexer from the sibling `fm-arm-command-policy.mjs`;
-those fork files did not move, so the moved copy only runs with the fork bin
-tree beside it (see the proof below).
+## Status
 
-## Frozen contract (identical to the fork)
+- Dormant. Nothing wires this wrapper into a hook yet. The fork still registers
+  and runs its own guard, and the hook swap lands in a later fork PR.
+- 0 copied upstream lines: no non-blank, non-comment, 20-character-or-longer line
+  in `supervisor-guard/` matches a whole line of any file in kunchenguid/firstmate
+  main. Evidence is in `data/thin-supervisor-guard/overlap-final.txt` in the
+  supervising Firstmate home.
 
-- Entry: `bin/fm-supervisor-work-pretool-check.sh --claude`; also accepts
-  `--command <cmd>` (CLI transport), `--secondmate` (judge pane typing as a
-  secondmate lead), and a PreToolUse JSON payload on stdin when `--command`
-  is absent.
-- Verdicts: ALLOW is exit 0 with no output. DENY is exit 2 with a deny
-  object on stderr —
-  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"},"systemMessage":"[<code>] <reason>"}` —
-  plus a `{"decision":"deny","reason":"[<code>] <reason>"}` object on stdout
-  unless `--claude` was supplied (with it, stdout stays empty). Outside a
-  genuine supervisor home, and on malformed transport or a missing runtime,
-  it exits 0 with no output: inert or fail-open, never a block.
-- Rules: `supervisor-no-mistakes-run` (a supervisor never drives a
-  crew-owned `no-mistakes axi run`/`respond`; `status` stays allowed),
-  `supervisor-poll-in-turn` (no sleep over 60 seconds, no unreadable sleep
-  duration, no loop whose body sleeps), `supervisor-pane-typing` (no
-  `herdr pane send-text`/`send-keys` or `tmux send-keys`, secondmate lead
-  only). A linked worker worktree is always allowed.
-- Policy module: exports `decision` and `MAX_TURN_SLEEP_SECONDS`; direct CLI
-  `--command <cmd> [--secondmate]` prints `allow` or
-  `deny<TAB><code><TAB><reason>`.
+## Fork-only rules
 
-## Provenance: byte-identical to the fork
+The rules the fork's guard enforces (no driving a crew-owned no-mistakes run
+from a supervisor, no sleep over the turn budget, no pane typing outside a
+secondmate lead) stay in the checkout's guard, where they run today. This add-on
+adds no rule of its own, so there is no second policy to drift. Moving any of
+them here is a later slice.
 
-Every moved file was compared byte for byte (sha256 plus file mode)
-against its fork source at
-`umeranjum17/firstmate@0689b4b9d9ab3594f846cfe07c400edfa58244bf` at move
-time:
+## Checks
 
-| moved file | fork source | sha256 |
-| --- | --- | --- |
-| `supervisor-guard/bin/fm-supervisor-work-pretool-check.sh` | `bin/fm-supervisor-work-pretool-check.sh` | `d8dd118470d1f43e5f75b4516d70afbfd186458366145a2f87a7a1625a3e7bf5` |
-| `supervisor-guard/bin/fm-supervisor-work-command-policy.mjs` | `bin/fm-supervisor-work-command-policy.mjs` | `cb9f9dff78d518bc2ffec7c1d83637fb0f02db277eb3ac2387e820b5eb18e131` |
-| `supervisor-guard/tests/fm-supervisor-work-pretool-check.test.sh` | `tests/fm-supervisor-work-pretool-check.test.sh` | `195b6d27bf1e7bfed0c14076803cc62cadd7ca84a12cd5e5a479985eebc6dae0` |
-| `supervisor-guard/docs/supervisor-work-guard.md` | `docs/supervisor-work-guard.md` | `c11d84b9fd566fcb837d4b4497424ba35a44b1146181cd27d10ade6c8498f11d` |
+- `bash supervisor-guard/tests/fm-supervisor-work-thin.test.sh` — the wrapper test.
+- `shellcheck -x -e SC2015,SC1091 supervisor-guard/bin/*.sh supervisor-guard/tests/*.sh`
+  and `bash -n` on each script, the same as the add-ons CI gate.
+- The overlap count above, re-run on the PR head against a fresh upstream clone.
 
-Modes match too: the two `bin/` files and the test are executable, the doc
-is not. Treat any future diff against the fork file as a contract change,
-not a refactor.
-
-## Side-by-side proof (re-run before the hook swaps the called path)
-
-1. Unpack the fork tree at the commit above into two scratch roots with
-   `git archive`; in the second root only, overwrite the four files with
-   the moved bytes. `diff -r` of the two roots must be empty, and the
-   sha256 table above must still match.
-2. Run `tests/fm-supervisor-work-pretool-check.test.sh` in the fork scratch
-   root; it must print its PASS lines. The test drives the sibling scope
-   library, lexer module, and tracked hook registrations, so it runs in the
-   full fork tree, never against this directory alone.
-3. Run the repo CI gate (the lint plus syntax check over every add-on
-   script) on the PR head.
-
-Timing note: the host is often heavily loaded, so a run can fail on a
-timing budget rather than on behavior; record the output and allow at most
-three runs in total.
+The wrapper test needs no jq, node or network, and it never touches a real home.
