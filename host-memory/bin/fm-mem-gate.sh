@@ -53,7 +53,7 @@ done
 [ $((emu + grd)) -gt 0 ] && { sleep 30 & } && exec 9>&-  # holder child keeps the lock 30 s; this process lets go
 if command -v systemd-run >/dev/null; then
   if err=$(systemd-run --user --scope --quiet --slice=fm-heavy.slice --collect -- true 2>&1); then
-    exec systemd-run --user --scope --quiet --slice=fm-heavy.slice --collect -- "$@"
+    exec systemd-run --user --scope --quiet --slice=fm-heavy.slice --collect -p MemoryMax="${FM_MEM_JOB_GB:-10}G" -p MemorySwapMax=4G -- "$@"
   fi
   printf 'fm-mem-gate: systemd scope unavailable (%s); running directly\n' "${err:-user manager unavailable}" >&2
 else
