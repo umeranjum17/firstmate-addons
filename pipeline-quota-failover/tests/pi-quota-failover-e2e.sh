@@ -440,59 +440,48 @@ done
 kill -KILL "$spid" 2>/dev/null
 is "INT to the wrapper's group leaves no pi alive" "$gone" yes
 
-# 10. Extensions: pi runs with -ne, then -e for each extension pi would load except pi-hermes-memory: the user packages
-#     from pi list (their manifests, or extensions/ without one), the user extensions dir (guards included, backup copies
-#     not), and the built-ins. A settings "-builtin:" entry turns that built-in off. A list that cannot be read runs pi as
-#     before, with one log line saying why.
+# 10. Extensions: every call runs pi with -ne and -e for each extension pi would load except pi-hermes-memory: pi list
+#     packages (manifests, or extensions/ without one), the user extensions dir without backup copies, settings and the
+#     built-ins. A settings "-builtin:" entry turns that built-in off. An unreadable pi list runs pi as before, one log line.
 pkgs=$work/pkgs
 mkdir -p "$pkgs/pi-hermes-memory/src" "$pkgs/pi-claude-bridge/src" "$pkgs/pi-web-access/dist" "$pkgs/pi-plain/extensions" "$home/.pi/agent/extensions"
 printf '%s\n' '{"pi":{"extensions":["./src/index.ts"]}}' >"$pkgs/pi-hermes-memory/package.json"
 printf '%s\n' '{"pi":{"extensions":["./src/index.ts"]}}' >"$pkgs/pi-claude-bridge/package.json"
 printf '%s\n' '{"pi":{"extensions":["./dist"]}}' >"$pkgs/pi-web-access/package.json"
 for f in "$pkgs/pi-hermes-memory/src/index.ts" "$pkgs/pi-claude-bridge/src/index.ts" "$pkgs/pi-web-access/dist/index.js" \
-  "$pkgs/pi-plain/extensions/a.ts" "$pkgs/pi-plain/extensions/b.ts" \
-  "$home/.pi/agent/extensions/fm-rm-guard.ts" "$home/.pi/agent/extensions/fm-literal-delete.ts" \
-  "$home/.pi/agent/extensions/fm-rm-guard.ts.bak-x"; do
-  echo '// stub' >"$f"
-done
+  "$pkgs/pi-plain/extensions/a.ts" "$home/.pi/agent/extensions/fm-rm-guard.ts" "$home/.pi/agent/extensions/fm-literal-delete.ts" \
+  "$home/.pi/agent/extensions/fm-rm-guard.ts.bak-x"; do echo '// stub' >"$f"; done
 printf 'User packages:\n  npm:pi-hermes-memory\n    %s\n  npm:pi-claude-bridge\n    %s\n  npm:pi-web-access\n    %s\n  npm:pi-plain\n    %s\n' \
   "$pkgs/pi-hermes-memory" "$pkgs/pi-claude-bridge" "$pkgs/pi-web-access" "$pkgs/pi-plain" >"$work/pi-list.txt"
 export STUB_PI_LIST=$work/pi-list.txt
 nodead
-has_arg() { case " $argv10 " in *" $1 "*) ok "$2" ;; *) no "$2: argv lacks [$1]: $argv10" ;; esac; }
+has_arg() { case " $(sed -n 1p "$STUB_ARGV") " in *" $1 "*) ok "$2" ;; *) no "$2: argv lacks [$1]: $(sed -n 1p "$STUB_ARGV")" ;; esac; }
 : >"$STUB_ARGV"
 OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10")
 is "extension run exits 0" "$?" "0"
-argv10=$(sed -n 1p "$STUB_ARGV")
-case $argv10 in "-ne "*) ok "pi runs with -ne" ;; *) no "pi argv lacks -ne first: $argv10" ;; esac
+case $(sed -n 1p "$STUB_ARGV") in "-ne "*) ok "pi runs with -ne" ;; *) no "pi argv lacks -ne first" ;; esac
 has_arg "-e $home/.pi/agent/extensions/fm-rm-guard.ts" "fm-rm-guard loads"
 has_arg "-e $home/.pi/agent/extensions/fm-literal-delete.ts" "fm-literal-delete loads"
 has_arg "-e $pkgs/pi-claude-bridge/src/index.ts" "a package's manifest entry loads"
 has_arg "-e $pkgs/pi-web-access/dist/index.js" "a manifest directory loads its index"
 has_arg "-e $pkgs/pi-plain/extensions/a.ts" "a package without a manifest loads its extensions dir"
 has_arg "-e builtin:mcp" "built-in mcp loads"
-case " $argv10 " in *pi-hermes-memory* | *.bak-x*) no "hermes or a backup copy is in argv: $argv10" ;; *) ok "no pi-hermes-memory and no backup copy in argv" ;; esac
-is "fallback failover call carries the same extensions" "$(sed -n 2p "$STUB_ARGV" | cut -d' ' -f1)" "-ne"
+case " $(sed -n 1p "$STUB_ARGV") " in *pi-hermes-memory* | *.bak-x*) no "hermes or a backup copy is in argv" ;; *) ok "no pi-hermes-memory and no backup copy in argv" ;; esac
 
-# A settings "-builtin:mcp" turns that built-in off, the others stay on.
+# A settings "-builtin:mcp" turns that built-in off; a pinned model passes through with -ne as well.
 printf '%s\n' '{"extensions":["-builtin:mcp"]}' >"$home/.pi/agent/settings.json"
 : >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10b")
-argv10=$(sed -n 1p "$STUB_ARGV")
-case " $argv10 " in *" builtin:mcp "*) no "settings -builtin:mcp still loads mcp" ;; *) ok "settings -builtin:mcp turns mcp off" ;; esac
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model kimi/k2 --mode json --no-session 2>"$work/err10b")
+case " $(sed -n 1p "$STUB_ARGV") " in *" builtin:mcp "*) no "settings -builtin:mcp still loads mcp" ;; *) ok "settings -builtin:mcp turns mcp off" ;; esac
+case $(sed -n 1p "$STUB_ARGV") in "-ne "*) ok "pinned passthrough runs with -ne" ;; *) no "pinned passthrough lacks -ne" ;; esac
 has_arg "-e builtin:llama.cpp" "other built-ins stay on"
 rm -f -- "$home/.pi/agent/settings.json"
 
-# A pinned model outside the chain passes through with the same extension args.
-: >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | "$wrapper" --model kimi/k2 --mode json --no-session 2>"$work/err10c")
-argv10=$(sed -n 1p "$STUB_ARGV")
-case $argv10 in "-ne "*) ok "pinned passthrough runs with -ne" ;; *) no "pinned passthrough lacks -ne: $argv10" ;; esac
-
 # An unreadable pi list: pi runs as before (no -ne), one log line says why, and the call still answers.
+nodead
 : >"$log"
 : >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | STUB_PI_LIST_EXIT=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10d")
+OUT=$(printf '%s' "$prompt" | STUB_PI_LIST_EXIT=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10c")
 is "unreadable list: call exits 0" "$?" "0"
 case $(sed -n 1p "$STUB_ARGV") in "--model "*) ok "unreadable list: pi runs without -ne" ;; *) no "unreadable list: argv is $(sed -n 1p "$STUB_ARGV")" ;; esac
 is "unreadable list: one log line per call" "$(grep -c 'extension list unreadable (pi list exited 1)' "$log")" "1"

@@ -19,9 +19,7 @@
 # line containing "quota exhausted", which no-mistakes classifies as terminal,
 # so the dead chain is never re-retried.
 #
-# Each call runs pi with -ne and -e for every extension pi would load, except pi-hermes-memory (its startup sync
-# silenced pi for 5 s to 134 s under load). The list is read at call time from pi list, the user extensions dir and
-# the settings; see README.md.
+# Each call runs pi with -ne and -e for every extension pi would load, except pi-hermes-memory (see README.md).
 #
 # Install (idempotent): pipeline-quota-failover/install.sh
 # It copies this script to ~/.local/share/fm-pipeline-quota-failover/ and sets
@@ -163,66 +161,58 @@ drop_session() {
   done
 }
 
-# ext_discover <dir>: the extensions pi finds in a directory without a manifest: direct .ts/.js files, and subdirectories
-# with an index.ts or index.js.
-ext_discover() {
+# ext_list <dir>: the extension files pi finds in a directory: direct .ts/.js files and subdirectories' index.ts/index.js.
+ext_list() {
   local f
-  for f in "$1"/*.ts "$1"/*.js; do [ -f "$f" ] && printf '%s\n' "$f"; done
-  for f in "$1"/*/; do
-    if [ -f "$f/index.ts" ]; then printf '%s\n' "${f%/}/index.ts"
-    elif [ -f "$f/index.js" ]; then printf '%s\n' "${f%/}/index.js"
-    fi
-  done
+  for f in "$1"/*.ts "$1"/*.js "$1"/*/index.ts "$1"/*/index.js; do [ -f "$f" ] && printf '%s\n' "$f"; done
 }
-# ext_entry <path>: the file pi loads for a manifest or settings path: the path itself when it is a file, the index of a
-# directory that has one, else what ext_discover finds in it (a bare -e on a directory without an index fails to load).
+# ext_entry <path>: what pi loads for a manifest or settings path: a file as is, a directory's index, else the directory's
+# extensions (a bare -e on a directory without an index does not load).
 ext_entry() {
   if [ ! -d "$1" ]; then printf '%s\n' "$1"
   elif [ -f "$1/index.ts" ]; then printf '%s\n' "$1/index.ts"
   elif [ -f "$1/index.js" ]; then printf '%s\n' "$1/index.js"
-  else ext_discover "$1"
+  else ext_list "$1"
   fi
 }
-# package_extensions <package dir>: a package's pi.extensions entries when it has a pi manifest, else its extensions/.
+# package_extensions <package dir>: its pi.extensions entries when it has a pi manifest, else its extensions/ directory.
 package_extensions() {
   local p
   if jq -e 'has("pi")' "$1/package.json" >/dev/null 2>&1; then
-    jq -r '.pi.extensions[]?' "$1/package.json" 2>/dev/null | while IFS= read -r p; do
-      if [ -e "$1/${p#./}" ]; then ext_entry "$1/${p#./}"; else log_line "package manifest entry $p not found in $1; not loaded"; fi
+    jq -r '.pi.extensions[]?' "$1/package.json" | while IFS= read -r p; do
+      if [ -e "$1/${p#./}" ]; then ext_entry "$1/${p#./}"; else log_line "manifest entry $p not found in $1; not loaded"; fi
     done
   else
-    ext_discover "$1/extensions"
+    ext_list "$1/extensions"
   fi
 }
-# pi_extension_args: prints "-ne", then "-e <path>" for every extension pi would load here except pi-hermes-memory. The
-# sources are pi list (user packages), the user extensions dir, the settings' extensions array and pi's built-ins, minus
-# any the settings turn off. A list that cannot be read prints the reason and returns 1; the caller then runs pi as before.
-drop_package=npm:pi-hermes-memory
-builtin_extensions='mcp llama.cpp codemode tool-search'
+# pi_extension_args: prints "-ne" and "-e <path>" pairs for every extension pi would load here except pi-hermes-memory:
+# the user packages (pi list), the user extensions dir, the settings' extensions array and pi's built-ins minus any the
+# settings turn off. An unreadable list prints the reason and returns 1; the caller then runs pi as before.
 pi_extension_args() {
-  local agent_dir=${PI_CODING_AGENT_DIR:-$HOME/.pi/agent} settings_json list src dir e b
+  local agent_dir=${PI_CODING_AGENT_DIR:-$HOME/.pi/agent} settings list src dir e b
   command -v jq >/dev/null 2>&1 || { echo "jq missing"; return 1; }
-  settings_json=$(cat "$agent_dir/settings.json" 2>/dev/null || echo '{}')
-  jq -e . <<<"$settings_json" >/dev/null 2>&1 || { echo "$agent_dir/settings.json does not parse"; return 1; }
+  settings=$(cat "$agent_dir/settings.json" 2>/dev/null || echo '{}')
+  jq -e . <<<"$settings" >/dev/null 2>&1 || { echo "$agent_dir/settings.json does not parse"; return 1; }
   list=$("$real_pi" list 2>/dev/null) || { echo "pi list exited $?"; return 1; }
   printf '%s\n' -ne
-  while IFS=$'\t' read -r src dir; do
-    [ "$src" = "$drop_package" ] && continue
-    while IFS= read -r e; do printf '%s\n' -e "$e"; done < <(package_extensions "$dir")
-  done < <(awk '/^  [^ ]/ {src=$1} /^    \// {print src "\t" $1}' <<<"$list")
-  while IFS= read -r e; do printf '%s\n' -e "$e"; done < <(ext_discover "$agent_dir/extensions")
-  while IFS= read -r e; do
-    case $e in
-      builtin:*) ;;
-      ~*) e=$HOME${e#\~} ;;
-      /*) ;;
-      *) e=$agent_dir/$e ;;
-    esac
-    while IFS= read -r p; do printf '%s\n' -e "$p"; done < <(ext_entry "$e")
-  done < <(jq -r '.extensions[]? | select(startswith("-") or startswith("+") or startswith("!") | not)' <<<"$settings_json")
-  for b in $builtin_extensions; do
-    jq -e --arg d "-builtin:$b" '(.extensions // []) | index($d) | not' <<<"$settings_json" >/dev/null 2>&1 && printf '%s\n' -e "builtin:$b"
-  done
+  {
+    while IFS=$'\t' read -r src dir; do
+      [ "$src" = npm:pi-hermes-memory ] || package_extensions "$dir"
+    done < <(awk '/^  [^ ]/ {src=$1} /^    \// {print src "\t" $1}' <<<"$list")
+    ext_list "$agent_dir/extensions"
+    while IFS= read -r e; do
+      case $e in
+        builtin:* | /*) ;;
+        ~*) e=$HOME${e#\~} ;;
+        *) e=$agent_dir/$e ;;
+      esac
+      ext_entry "$e"
+    done < <(jq -r '.extensions[]? | select(startswith("-") or startswith("+") or startswith("!") | not)' <<<"$settings")
+    for b in mcp llama.cpp codemode tool-search; do
+      jq -e --arg d "-builtin:$b" '(.extensions // []) | index($d) | not' <<<"$settings" >/dev/null 2>&1 && echo "builtin:$b"
+    done
+  } | while IFS= read -r p; do printf '%s\n' -e "$p"; done
 }
 
 tree_pids() {
@@ -288,8 +278,7 @@ error_text() {
   if [ "$1" != 0 ]; then cat "$err_file" 2>/dev/null; fi
 }
 
-# Every pi call here runs without pi's own extension discovery (-ne), with the same extensions pi would load, minus
-# pi-hermes-memory: its session_start sync delays pi's first event by up to minutes under load.
+# Every pi call runs with -ne and the extension list (pi-hermes-memory is out: its startup sync delayed pi's first event).
 ext_args=()
 if ext_out=$(pi_extension_args); then
   mapfile -t ext_args <<<"$ext_out"
