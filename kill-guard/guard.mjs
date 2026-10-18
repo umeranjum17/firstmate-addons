@@ -9,8 +9,17 @@ const MODELLED = { kill: "lL", pkill: "f", killall: "" }; // options the guard r
 const WRAPPERS = /^(sudo|env|nohup|exec|command|builtin|time|nice|ionice|taskset|stdbuf|timeout|setsid|doas|runuser|chrt|flock|unbuffer|xargs|then|do|else|if|elif|case|while|until|\{|[\w.-]+\(\))$/;
 const SIGNAL = /^-(\d+|[A-Z][A-Z0-9]*)$/; // -9, -KILL, -SIGTERM
 const REDIRECT = /^\d*[<>]|^&>/;
-const CMD = /^(kill|pkill|killall|eval|(ba|z|da)?sh|xargs)$/;
 const commandName = (t) => basename(t).replace(/\\/g, "");
+
+// Heredoc bodies are data: drop each body from the line after its marker through the closing word.
+function dropHeredocBodies(command) {
+	let end = null;
+	return command.split("\n").filter((line) => {
+		if (end !== null) { if (line.trim() === end) end = null; return false; }
+		end = line.match(/(?<!<)<<(?!<)-?\s*(['"]?)(\w+)\1/)?.[2] ?? null;
+		return true;
+	}).join("\n");
+}
 
 // Simple commands, split on ; | & and newlines outside quotes.
 function segments(command) {
@@ -43,10 +52,7 @@ function words(s) {
 function commandOf(w) {
 	let i = 0, piped = false;
 	for (; i < w.length && (/^[A-Za-z_]\w*=|^[-\d.]/.test(w[i]) || WRAPPERS.test(w[i])); i++) piped ||= w[i] === "xargs";
-	const at = i ? w.findIndex((t, k) => k >= i && CMD.test(commandName(t))) : -1;
-	if (at < 0) return { words: w.slice(i), piped };
-	if (commandName(w[at]) === "xargs") return { words: commandOf(w.slice(at + 1)).words, piped: true };
-	return { words: w.slice(at), piped };
+	return { words: w.slice(i), piped };
 }
 
 // Every process from /proc. Throws when /proc cannot be read.
@@ -85,7 +91,6 @@ function judge(name, args, text, caller, procs) {
 	}
 	const unresolved = (why) => `"${text}" cannot be resolved to processes: ${why}`;
 	if (flags.some((f) => !MODELLED[name].includes(f))) return unresolved("an option the guard does not read");
-	if (name === "kill" && flags.length && !ops.length) return null; // kill -l lists signal names and signals nothing
 	if (!ops.length) return null;
 	let hits;
 	if (name === "kill") {
@@ -136,7 +141,7 @@ function substitutions(text) {
 
 // The first kill, pkill or killall in the command (also inside sh -c, eval, $( ) or backticks) aimed outside the caller's tree.
 function blockedBy(command, caller, procs) {
-	for (const seg of segments(command)) {
+	for (const seg of segments(dropHeredocBodies(command))) {
 		const text = seg.trim().replace(/^[\s({!]+/, "");
 		const inner = substitutions(text);
 		const { words: w, piped } = commandOf(words(text));
