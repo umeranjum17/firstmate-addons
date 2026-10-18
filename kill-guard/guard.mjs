@@ -9,6 +9,8 @@ const MODELLED = { kill: "lL", pkill: "f", killall: "" }; // options the guard r
 const WRAPPERS = /^(sudo|env|nohup|exec|command|builtin|time|nice|timeout|setsid|xargs|then|do|else|if|while|until)$/;
 const SIGNAL = /^-(\d+|[A-Z][A-Z0-9]*)$/; // -9, -KILL, -SIGTERM
 const REDIRECT = /^\d*[<>]|^&>/;
+const CMD = /^(kill|pkill|killall|eval|(ba|z|da)?sh|xargs)$/;
+const commandName = (t) => basename(t).replace(/\\/g, "");
 
 // Simple commands, split on ; | & and newlines outside quotes.
 function segments(command) {
@@ -41,7 +43,10 @@ function words(s) {
 function commandOf(w) {
 	let i = 0, piped = false;
 	for (; i < w.length && (/^[A-Za-z_]\w*=|^[-\d.]/.test(w[i]) || WRAPPERS.test(w[i])); i++) piped ||= w[i] === "xargs";
-	return { words: w.slice(i), piped };
+	const at = i ? w.findIndex((t, k) => k >= i && CMD.test(commandName(t))) : -1;
+	if (at < 0) return { words: w.slice(i), piped };
+	if (commandName(w[at]) === "xargs") return { words: commandOf(w.slice(at + 1)).words, piped: true };
+	return { words: w.slice(at), piped };
 }
 
 // Every process from /proc. Throws when /proc cannot be read.
@@ -91,6 +96,7 @@ function judge(name, args, text, caller, procs) {
 		if (ops.some((o) => /[$`]/.test(o))) return unresolved("the pattern is set by the shell");
 		let test = (p) => ops.includes(p.comm) || ops.includes(basename(p.argv[0] ?? ""));
 		if (name === "pkill") {
+			if (/[\\[{]/.test(ops[0])) return unresolved("the pattern uses regex syntax that pkill and JavaScript read differently");
 			let re;
 			try { re = new RegExp(ops[0]); } catch { return unresolved("the pattern is not a regex"); }
 			test = (p) => re.test(flags.includes("f") ? p.argv.join(" ") : p.comm);
@@ -111,9 +117,10 @@ function blockedBy(command, caller, procs) {
 		const text = seg.trim().replace(/^[\s({!]+/, "");
 		const inner = [...text.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)].map((m) => m[1] ?? m[2]);
 		const { words: w, piped } = commandOf(words(text));
-		const name = w.length ? basename(w[0]).replace(/^\\/, "") : "";
+		const name = w.length ? commandName(w[0]) : "";
+		const shellC = /^(ba|z|da)?sh$/.test(name) ? w.findIndex((t, k) => k > 0 && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(t)) : -1;
 		const t = inner.map((c) => blockedBy(c, caller, procs)).find(Boolean) ??
-			(/^(ba|z|da)?sh$/.test(name) && /^-\w*c$/.test(w[1] ?? "") && w[2] ? blockedBy(w[2], caller, procs) :
+			(shellC >= 0 && w[shellC + 1] ? blockedBy(w[shellC + 1], caller, procs) :
 			name === "eval" ? blockedBy(w.slice(1).join(" "), caller, procs) :
 			!Object.hasOwn(MODELLED, name) ? null :
 			piped ? `"${text}" cannot be resolved to processes: its targets come from xargs` :
