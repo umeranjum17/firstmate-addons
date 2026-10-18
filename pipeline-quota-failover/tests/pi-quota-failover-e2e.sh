@@ -16,7 +16,8 @@
 # Also covers the quota-axi pre-check (a stub quota-axi: exhausted_now skips the route without a pi call, a failing
 # quota-axi still calls it), the idle watchdog (a silent stub is killed after a short IDLE_SECS and fails over for that
 # call only: no marker, the next call tries the route again, a stall on the last model is not "quota exhausted"), a
-# future-dated marker's skip line showing the time left, and a call killed from outside keeping its marker.
+# future-dated marker's skip line showing the time left, and a call killed from outside keeping its marker. Also covers
+# the extension set every call runs with (-ne plus the extensions pi would load, minus pi-hermes-memory).
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
@@ -47,6 +48,8 @@ err_has() { if grep -q -- "$3" "$2" 2>/dev/null; then ok "$1"; else no "$1: $2 l
 # line in $STUB_ARGV.
 cat >"$stub/pi" <<'STUB'
 #!/usr/bin/env bash
+# pi list (the wrapper's extension lookup) prints $STUB_PI_LIST and exits $STUB_PI_LIST_EXIT; it is not a model call.
+[ "${1:-}" = list ] && { [ -n "${STUB_PI_LIST:-}" ] && cat "$STUB_PI_LIST"; exit "${STUB_PI_LIST_EXIT:-0}"; }
 printf '%s\n' "$*" >>"$STUB_ARGV"
 model=''
 prev=''
@@ -118,6 +121,9 @@ printf '{"providers":[{"provider":"%s","quotaSemantics":{"effectiveAvailability"
 STUB
 chmod +x "$stub/quota-axi"
 
+# The argv every wrapped call carries before the caller's flags: -ne, then the built-in extensions (no user packages or
+# extension files in this HOME, so the list is just pi's built-ins).
+ext_prefix='-ne -e builtin:mcp -e builtin:llama.cpp -e builtin:codemode -e builtin:tool-search'
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
 export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child STUB_PI=$work/pi.pid
@@ -187,9 +193,9 @@ OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json -
 is "session failover exits 0" "$?" "0"
 out_has "failover stream is GPT-6 Luna" '"model":"openai-codex/gpt-6-luna"'
 is "first attempt keeps the session" "$(sed -n 1p "$STUB_ARGV")" \
-  "--model zai/glm-5.3-flash --mode json --session 01234567-89ab-cdef-0123-456789abcdef"
+  "$ext_prefix --model zai/glm-5.3-flash --mode json --session 01234567-89ab-cdef-0123-456789abcdef"
 is "failover attempt drops the session" "$(sed -n 2p "$STUB_ARGV")" \
-  "--model openai-codex/gpt-6-luna --mode json"
+  "$ext_prefix --model openai-codex/gpt-6-luna --mode json"
 
 # 5. Default chain exhausted (glm, then a quota-dead GPT-6 Luna): each model
 #    once, terminal "quota exhausted", exit 1.
@@ -225,7 +231,7 @@ backdate openai-codex/gpt-6-luna
 OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --session 01234567-89ab-cdef-0123-456789abcdef 2>"$work/err5d")
 is "skipped-glm call exits 0" "$?" "0"
 out_has "skipped-glm call answers from Luna" '"model":"openai-codex/gpt-6-luna"'
-is "glm skipped: one pi call, Luna, no session" "$(cat "$STUB_ARGV")" "--model openai-codex/gpt-6-luna --mode json"
+is "glm skipped: one pi call, Luna, no session" "$(cat "$STUB_ARGV")" "$ext_prefix --model openai-codex/gpt-6-luna --mode json"
 is "Luna answer cleared its marker" "$(age_of openai-codex/gpt-6-luna)" "none"
 
 # 5e. glm's window over: glm is tried again first, and its new quota error
@@ -234,7 +240,7 @@ backdate zai/glm-5.3-flash
 : >"$STUB_ARGV"
 OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err5e")
 is "expired-marker call exits 0" "$?" "0"
-is "expired glm tried again first" "$(sed -n 1p "$STUB_ARGV")" "--model zai/glm-5.3-flash --mode json --no-session"
+is "expired glm tried again first" "$(sed -n 1p "$STUB_ARGV")" "$ext_prefix --model zai/glm-5.3-flash --mode json --no-session"
 fresh "glm marker renewed" zai/glm-5.3-flash
 
 # 5f. A marker dated 120s in the future (clock step): glm is skipped, and the skip line shows the time left until it
@@ -322,7 +328,7 @@ nodead
 : >"$STUB_ARGV"
 OUT=$(printf '%s' "$prompt" | STUB_QUOTA_FAIL=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err9b")
 is "failing quota-axi: failover exits 0" "$?" "0"
-is "failing quota-axi: glm still called first" "$(sed -n 1p "$STUB_ARGV")" "--model zai/glm-5.3-flash --mode json --no-session"
+is "failing quota-axi: glm still called first" "$(sed -n 1p "$STUB_ARGV")" "$ext_prefix --model zai/glm-5.3-flash --mode json --no-session"
 out_has "failing quota-axi: GPT-6 Luna answers" '"model":"openai-codex/gpt-6-luna"'
 
 # 9c. A silent pi (stub hangs with no output) is killed after IDLE_SECS: the next chain model answers for that call,
@@ -344,7 +350,7 @@ if child_gone; then ok "idle kill reached the tool child"; else no "tool child s
 : >"$STUB_ARGV"
 OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/hang openai-codex/gpt-6-luna' "$wrapper" --model bad/hang --mode json --no-session 2>"$work/err9c2")
 is "second stall exits 0" "$?" "0"
-is "next call tries the stalled route first" "$(sed -n 1p "$STUB_ARGV")" "--model bad/hang --mode json --no-session"
+is "next call tries the stalled route first" "$(sed -n 1p "$STUB_ARGV")" "$ext_prefix --model bad/hang --mode json --no-session"
 out_has "second stall fails over to GPT-6 Luna" '"model":"openai-codex/gpt-6-luna"'
 if grep -q 'model=bad/hang skipped' "$log"; then no "stalled route was skipped on the next call"; else ok "stalled route is not skipped on the next call"; fi
 is "second stall writes no marker" "$(age_of bad/hang)" none
@@ -433,6 +439,67 @@ for _ in $(seq 30); do
 done
 kill -KILL "$spid" 2>/dev/null
 is "INT to the wrapper's group leaves no pi alive" "$gone" yes
+
+# 10. Extensions: pi runs with -ne, then -e for each extension pi would load except pi-hermes-memory: the user packages
+#     from pi list (their manifests, or extensions/ without one), the user extensions dir (guards included, backup copies
+#     not), and the built-ins. A settings "-builtin:" entry turns that built-in off. A list that cannot be read runs pi as
+#     before, with one log line saying why.
+pkgs=$work/pkgs
+mkdir -p "$pkgs/pi-hermes-memory/src" "$pkgs/pi-claude-bridge/src" "$pkgs/pi-web-access/dist" "$pkgs/pi-plain/extensions" "$home/.pi/agent/extensions"
+printf '%s\n' '{"pi":{"extensions":["./src/index.ts"]}}' >"$pkgs/pi-hermes-memory/package.json"
+printf '%s\n' '{"pi":{"extensions":["./src/index.ts"]}}' >"$pkgs/pi-claude-bridge/package.json"
+printf '%s\n' '{"pi":{"extensions":["./dist"]}}' >"$pkgs/pi-web-access/package.json"
+for f in "$pkgs/pi-hermes-memory/src/index.ts" "$pkgs/pi-claude-bridge/src/index.ts" "$pkgs/pi-web-access/dist/index.js" \
+  "$pkgs/pi-plain/extensions/a.ts" "$pkgs/pi-plain/extensions/b.ts" \
+  "$home/.pi/agent/extensions/fm-rm-guard.ts" "$home/.pi/agent/extensions/fm-literal-delete.ts" \
+  "$home/.pi/agent/extensions/fm-rm-guard.ts.bak-x"; do
+  echo '// stub' >"$f"
+done
+printf 'User packages:\n  npm:pi-hermes-memory\n    %s\n  npm:pi-claude-bridge\n    %s\n  npm:pi-web-access\n    %s\n  npm:pi-plain\n    %s\n' \
+  "$pkgs/pi-hermes-memory" "$pkgs/pi-claude-bridge" "$pkgs/pi-web-access" "$pkgs/pi-plain" >"$work/pi-list.txt"
+export STUB_PI_LIST=$work/pi-list.txt
+nodead
+has_arg() { case " $argv10 " in *" $1 "*) ok "$2" ;; *) no "$2: argv lacks [$1]: $argv10" ;; esac; }
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10")
+is "extension run exits 0" "$?" "0"
+argv10=$(sed -n 1p "$STUB_ARGV")
+case $argv10 in "-ne "*) ok "pi runs with -ne" ;; *) no "pi argv lacks -ne first: $argv10" ;; esac
+has_arg "-e $home/.pi/agent/extensions/fm-rm-guard.ts" "fm-rm-guard loads"
+has_arg "-e $home/.pi/agent/extensions/fm-literal-delete.ts" "fm-literal-delete loads"
+has_arg "-e $pkgs/pi-claude-bridge/src/index.ts" "a package's manifest entry loads"
+has_arg "-e $pkgs/pi-web-access/dist/index.js" "a manifest directory loads its index"
+has_arg "-e $pkgs/pi-plain/extensions/a.ts" "a package without a manifest loads its extensions dir"
+has_arg "-e builtin:mcp" "built-in mcp loads"
+case " $argv10 " in *pi-hermes-memory* | *.bak-x*) no "hermes or a backup copy is in argv: $argv10" ;; *) ok "no pi-hermes-memory and no backup copy in argv" ;; esac
+is "fallback failover call carries the same extensions" "$(sed -n 2p "$STUB_ARGV" | cut -d' ' -f1)" "-ne"
+
+# A settings "-builtin:mcp" turns that built-in off, the others stay on.
+printf '%s\n' '{"extensions":["-builtin:mcp"]}' >"$home/.pi/agent/settings.json"
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10b")
+argv10=$(sed -n 1p "$STUB_ARGV")
+case " $argv10 " in *" builtin:mcp "*) no "settings -builtin:mcp still loads mcp" ;; *) ok "settings -builtin:mcp turns mcp off" ;; esac
+has_arg "-e builtin:llama.cpp" "other built-ins stay on"
+rm -f -- "$home/.pi/agent/settings.json"
+
+# A pinned model outside the chain passes through with the same extension args.
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | "$wrapper" --model kimi/k2 --mode json --no-session 2>"$work/err10c")
+argv10=$(sed -n 1p "$STUB_ARGV")
+case $argv10 in "-ne "*) ok "pinned passthrough runs with -ne" ;; *) no "pinned passthrough lacks -ne: $argv10" ;; esac
+
+# An unreadable pi list: pi runs as before (no -ne), one log line says why, and the call still answers.
+: >"$log"
+: >"$STUB_ARGV"
+OUT=$(printf '%s' "$prompt" | STUB_PI_LIST_EXIT=1 "$wrapper" --model zai/glm-5.3-flash --mode json --no-session 2>"$work/err10d")
+is "unreadable list: call exits 0" "$?" "0"
+case $(sed -n 1p "$STUB_ARGV") in "--model "*) ok "unreadable list: pi runs without -ne" ;; *) no "unreadable list: argv is $(sed -n 1p "$STUB_ARGV")" ;; esac
+is "unreadable list: one log line per call" "$(grep -c 'extension list unreadable (pi list exited 1)' "$log")" "1"
+out_has "unreadable list: call still answers" '"model":"openai-codex/gpt-6-luna"'
+
+unset STUB_PI_LIST
+rm -f -- "$home/.pi/agent/extensions/fm-rm-guard.ts" "$home/.pi/agent/extensions/fm-literal-delete.ts" "$home/.pi/agent/extensions/fm-rm-guard.ts.bak-x"
 
 # 8. install.sh: key-level config edit in a throwaway config, never printing it.
 cfg=$work/config.yaml
