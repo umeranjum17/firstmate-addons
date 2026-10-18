@@ -60,6 +60,11 @@ case $model in
   bad/graceful) trap 'exit 0' TERM; bash -c 'trap "sleep 2; touch \"\$STUB_CLEANUP\"; exit 0" TERM; sleep 600 & wait' & wait; exit 0 ;;
   bad/quiet) printf '%s\n' "$$" >"$STUB_PI"; sleep 600; exit 0 ;;
   bad/stubborn) trap '' TERM; bash -c 'sleep 600 & printf "%s\n" "$!" >"$STUB_CHILD"; wait' & while :; do sleep 1; done ;;
+  bad/slow-stream)
+    printf '%s\n' '{"type":"session","id":"s-1"}'
+    for _ in 1 2 3 4; do sleep 1; printf '%s\n' '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"x"}}'; done
+    printf '%s\n' '{"type":"message_end","role":"assistant","model":"bad/slow-stream","content":"PONG"}'
+    exit 0 ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
 printf '%s\n' '{"type":"session","id":"s-1"}'
@@ -368,6 +373,16 @@ OUT=$(printf '%s' "$prompt" | STUB_CLEANUP="$work/cleanup" PI_QUOTA_FAILOVER_IDL
 is "graceful tool child: failover exits 0" "$?" "0"
 out_has "graceful tool child: Haiku 5.5 answers" '"model":"claude-bridge/claude-haiku-5-5"'
 if [ -f "$work/cleanup" ]; then ok "tool child finished cleanup within the grace"; else no "tool child was killed before its cleanup"; fi
+
+# 9n. A call that streams steadily for longer than its idle limit (a large answer) is not killed: its own answer
+#     passes through and the chain never moves on.
+nodead
+logged=$(wc -l <"$log" 2>/dev/null || echo 0)
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/slow-stream claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/slow-stream --mode json --no-session 2>"$work/err9n")
+is "steady stream past the idle limit exits 0" "$?" "0"
+out_has "steady stream answer is the route's own" '"model":"bad/slow-stream"'
+out_count "steady stream never fails over" '"model":"claude-bridge' 0
+if tail -n +"$((logged + 1))" "$log" | grep -q 'no output for'; then no "steady stream was killed as idle"; else ok "steady stream is not killed as idle"; fi
 
 # 9d. A call killed from outside (not a quota error) keeps the route's existing marker and passes its exit through.
 nodead
