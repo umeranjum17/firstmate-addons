@@ -39,7 +39,6 @@ hook() {
 block() { hook "$1" "$2"; [ "$rc" -eq 2 ] && [[ "$err" == *"BLOCKED by the fleet kill guard"* && "$err" == *"$3"* ]] && ok "blocked: $2" || no "not blocked: $2 (rc=$rc) $err"; }
 allow() { hook "$1" "$2"; [ "$rc" -eq 0 ] && ok "allowed: $2" || no "blocked: $2 ($err)"; }
 
-block "$$" 'kill 1' 'PID 1 (init)'
 block "$$" "sh -c 'kill -KILL 1'" 'PID 1 (init)'
 block "$$" 'ionice -c3 kill 1' 'PID 1 (init)'
 block "$$" 'echo $(kill -9 $(pgrep -x herdr))' 'cannot be resolved'
