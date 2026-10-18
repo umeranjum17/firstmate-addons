@@ -159,6 +159,8 @@ tree_pids() {
 end_pi() {
   local g p kids alive
   kids=$(tree_pids "$1")
+  # kids is one numeric pid per line; word splitting is the list
+  # shellcheck disable=SC2086
   kill -TERM "$1" $kids 2>/dev/null
   for ((g = 0; g < 5; g++)); do
     alive=0
