@@ -1,5 +1,3 @@
-// Fleet kill guard, the rule every adapter calls. A kill, pkill or killall may signal only the caller's own descendants,
-// never PID 1, the systemd user manager or the herdr server, and never a target it cannot resolve. A block is final.
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
