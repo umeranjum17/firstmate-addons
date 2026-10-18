@@ -56,6 +56,7 @@ for a in "$@"; do
 done
 case $model in
   bad/hang) sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
+  bad/graceful) trap 'exit 0' TERM; bash -c 'trap "sleep 2; touch \"\$STUB_CLEANUP\"; exit 0" TERM; sleep 600 & wait' & wait; exit 0 ;;
   bad/stubborn) trap '' TERM; bash -c 'sleep 600 & printf "%s\n" "$!" >"$STUB_CHILD"; wait' & while :; do sleep 1; done ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
@@ -317,6 +318,14 @@ OUT=$(cat "$work/out9k")
 out_has "TERM-ignoring silent pi: Haiku 5.5 answers" '"model":"claude-bridge/claude-haiku-5-5"'
 is "TERM-ignoring silent pi: one pi call per model" "$(wc -l <"$STUB_ARGV")" "2"
 if child_gone; then ok "TERM-ignoring pi's tool child was KILLed"; else no "tool child survived the KILL escalation"; fi
+
+# 9l. A silent pi that exits on TERM leaves its tool child a grace to finish cleanup: the child's cleanup runs before KILL.
+nodead
+rm -f "$work/cleanup"
+OUT=$(printf '%s' "$prompt" | STUB_CLEANUP="$work/cleanup" PI_QUOTA_FAILOVER_IDLE_SECS=2 PI_QUOTA_FAILOVER_CHAIN='bad/graceful claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/graceful --mode json --no-session 2>"$work/err9l")
+is "graceful tool child: failover exits 0" "$?" "0"
+out_has "graceful tool child: Haiku 5.5 answers" '"model":"claude-bridge/claude-haiku-5-5"'
+if [ -f "$work/cleanup" ]; then ok "tool child finished cleanup within the grace"; else no "tool child was killed before its cleanup"; fi
 
 # 9d. A call killed from outside (not a quota error) keeps the route's existing marker and passes its exit through.
 nodead
