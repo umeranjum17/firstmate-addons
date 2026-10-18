@@ -340,6 +340,7 @@ rc=$?
 is "INT to a silent wrapper exits with pi's status" "$rc" "130"
 if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "INT stopped the silent pi promptly"; else no "INT to a silent wrapper took $(($(date +%s) - t0))s"; fi
 is "no failover after INT" "$(wc -l <"$STUB_ARGV")" "1"
+kill "$(cat "$STUB_CHILD" 2>/dev/null)" 2>/dev/null
 
 # 9i. TERM to the wrapper during the idle-kill grace window (pi ignores TERM for 2s after going silent) stops the
 # call: no failover to the next model, pi's status passes through.

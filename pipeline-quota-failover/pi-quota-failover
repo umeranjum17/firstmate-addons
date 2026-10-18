@@ -152,14 +152,14 @@ drop_session() {
 run_watched() {
   local pid='' sizes seen='' last now g s
   idle_killed=0 stop_sig=0
-  trap 'stop_sig=1; [ -z "$pid" ] || kill -INT -- "-$pid" 2>/dev/null' INT
-  trap 'stop_sig=1; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null' TERM
-  if [ "$stop_sig" = 1 ]; then trap - INT TERM; return 1; fi
+  trap 'stop_sig=INT; [ -z "$pid" ] || kill -INT -- "-$pid" 2>/dev/null' INT
+  trap 'stop_sig=TERM; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null' TERM
+  if [ "$stop_sig" != 0 ]; then trap - INT TERM; return 1; fi
   set -m
   "$real_pi" "$@" <"$stdin_file" >"$out_file" 2>"$err_file" &
   pid=$!
   set +m
-  [ "$stop_sig" = 0 ] || kill -TERM -- "-$pid" 2>/dev/null
+  [ "$stop_sig" = 0 ] || kill -"$stop_sig" -- "-$pid" 2>/dev/null
   last=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
@@ -252,7 +252,7 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
   run_watched "${args[@]}"
   rc=$?
   t1=$(date +%s%3N)
-  if [ "$stop_sig" = 1 ]; then
+  if [ "$stop_sig" != 0 ]; then
     quota=0
   elif [ "$idle_killed" = 1 ]; then
     quota=1
