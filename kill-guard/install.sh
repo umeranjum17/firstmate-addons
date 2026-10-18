@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Install or update the fleet kill guard for this user: the rule, the Claude hook, and the pi and OpenCode adapters.
-# Idempotent: rerun it to update. Usage: install.sh [--dry-run]
+# Install or update the fleet kill guard (rule, Claude hook, pi and OpenCode adapters). Idempotent. Usage: install.sh [--dry-run]
 set -euo pipefail
 DRY=0
 [ "${1:-}" = --dry-run ] && { DRY=1; shift; }
@@ -10,8 +9,6 @@ DEST=${XDG_DATA_HOME:-$HOME/.local/share}/fm-kill-guard
 STAMP=$(date +%s)
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
-
-# put <target> <candidate>: replace target with candidate after a backup, or print the change when dry.
 put() {
   local target=$1 new=$2
   if [ -e "$target" ] && cmp -s "$target" "$new"; then echo "unchanged: $target"; return; fi
@@ -22,8 +19,7 @@ put() {
   cp "$new" "$target.tmp-$STAMP" && mv "$target.tmp-$STAMP" "$target"
 }
 
-# The hook command passes $PPID: the shell that runs the hook is started by the agent, the process whose children may be signalled.
-HOOK="node '$DEST/guard.mjs' --runtime claude --caller \$PPID"
+HOOK="node '$DEST/guard.mjs' --caller \$PPID"
 { [ -s "$HOME/.claude/settings.json" ] && cat "$HOME/.claude/settings.json" || echo '{}'; } | jq --arg cmd "$HOOK" '
   .hooks.PreToolUse = ([.hooks.PreToolUse[]? | .hooks |= map(select((.command // "") | contains("fm-kill-guard/guard.mjs") | not)) | select(.hooks | length > 0)]
     + [{matcher: "Bash", hooks: [{type: "command", command: $cmd, timeout: 10}]}])' > "$TMP/settings.json"
