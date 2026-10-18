@@ -14,7 +14,7 @@ on_exit() {
 }
 trap on_exit EXIT
 
-if [ -s "$SETTINGS" ]; then
+if [ -s "$SETTINGS" ] && jq -e '[.hooks.PreToolUse[]?.hooks[]? | (.command // "") | select(contains("fm-supervisor-work-pretool-check.sh"))] | length > 0' "$SETTINGS" >/dev/null; then
   jq '.hooks.PreToolUse = ([.hooks.PreToolUse[]? | .hooks |= map(select((.command // "") | contains("fm-supervisor-work-pretool-check.sh") | not)) | select(.hooks | length > 0)])' \
     "$SETTINGS" > "$TMP/settings.json"
   if cmp -s "$SETTINGS" "$TMP/settings.json"; then

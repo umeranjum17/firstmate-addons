@@ -41,7 +41,7 @@ fm_primary_scope_matches "$FMH" "$FMH/state" || exit 0
 ARGS=()
 fm_root_is_secondmate_home "$FMH" && ARGS+=(--secondmate)
 VERDICT=$(node "$DEST/fm-supervisor-work-decide.mjs" --lexer "$FMH/bin/fm-arm-command-policy.mjs" \
-  "${ARGS[@]}" --command "$CMD" 2>/dev/null) \
+  "${ARGS[@]+"${ARGS[@]}"}" --command "$CMD" 2>/dev/null) \
   || { echo "fm-supervisor-work: policy could not run, allowing" >&2; exit 0; }
 
 IFS=$'\t' read -r KIND CODE REASON <<< "$VERDICT"
