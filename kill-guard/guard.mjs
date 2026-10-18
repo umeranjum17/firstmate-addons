@@ -11,12 +11,12 @@ const SIGNAL = /^-(\d+|[A-Z][A-Z0-9]*)$/; // -9, -KILL, -SIGTERM
 const REDIRECT = /^\d*[<>]|^&>/;
 const commandName = (t) => basename(t).replace(/\\/g, "");
 
-// Heredoc bodies are data: drop each body from the line after its marker through the closing word.
+// Heredoc bodies are data, except when a shell reads them: drop each body from the line after its marker through the closing word.
 function dropHeredocBodies(command) {
-	let end = null;
+	let end = null, shell = false;
 	return command.split("\n").filter((line) => {
-		if (end !== null) { if (line.trim() === end) end = null; return false; }
-		end = line.match(/(?<!<)<<(?!<)-?\s*(['"]?)(\w+)\1/)?.[2] ?? null;
+		if (end !== null) { if (line.trim() === end) end = null; return shell; }
+		end = line.match(/(?<!<)<<(?!<)-?\s*(['"]?)([A-Za-z_]\w*)\1/)?.[2] ?? null, shell = /\b(ba|z|da)?sh\b/.test(line);
 		return true;
 	}).join("\n");
 }

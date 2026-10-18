@@ -20,8 +20,7 @@ if (pi) { mod.default({ on: (n, h) => (hooks[n] = h) }); console.log((await hook
 else { Object.assign(hooks, await mod.FmKillGuard({})); await hooks["tool.execute.before"]({ tool: "bash" }, { args: { command: "kill 1" } }).catch((e) => console.log(e.message)); }
 EOF
 for a in "pi:$T/home/.pi/agent/extensions/fm-kill-guard.ts" "opencode:$T/home/.config/opencode/plugins/fm-kill-guard.js"; do
-  out=$(node "$T/adapters.mjs" "${a#*:}" 2>/dev/null || true)
-  [[ "$out" == *"PID 1 (init)"* ]] && ok "${a%%:*} adapter blocks kill 1" || no "${a%%:*} adapter: $out"
+  out=$(node "$T/adapters.mjs" "${a#*:}" 2>/dev/null || true); [[ "$out" == *"PID 1 (init)"* ]] && ok "${a%%:*} adapter blocks kill 1" || no "${a%%:*} adapter: $out"
 done
 HOOK=$(jq -r '.hooks.PreToolUse[].hooks[] | select(.command | contains("fm-kill-guard")) | .command' "$T/home/.claude/settings.json")
 
@@ -30,8 +29,7 @@ fake() {
   "$T/bin/$1" "${@:2}" >/dev/null 2>&1 & FAKE=$!; PIDS+=("$FAKE")
   for _ in $(seq 100); do [ "$(cat "/proc/$FAKE/comm" 2>/dev/null)" = "$1" ] && break; sleep 0.05; done
 }
-fake systemd --user; SYSD=$FAKE
-fake herdr server; HERDR=$FAKE
+fake systemd --user; SYSD=$FAKE; fake herdr server; HERDR=$FAKE
 sleep 300 & C=$!; sleep 300 & S=$!; PIDS+=("$C" "$S")
 
 hook() {
@@ -52,6 +50,8 @@ block "$$" "pkill 'h[[:lower:]]rdr'" 'cannot be resolved'
 block "$$" 'killall /usr/bin/herdr' 'cannot be resolved'
 block "$$" 'kill -9 -1' 'cannot be resolved'
 block "$$" 'xargs kill' 'come from xargs'
+block "$$" $'bash <<EOF\nkill -9 1\nEOF' 'PID 1 (init)'
+block "$$" $'echo $((1<<2))\nkill -9 1' 'PID 1 (init)'
 block "$C" "kill $S" 'which this task did not start'
 allow "$$" "kill $C"
 allow "$$" "kill $C 2>/dev/null"
