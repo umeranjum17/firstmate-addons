@@ -91,6 +91,18 @@ block "$$" 'xargs kill' 'come from xargs'
 block "$$" 'pkill -u umer x' 'cannot be resolved to processes'
 block "$$" 'pkill -x herdr' 'cannot be resolved to processes'
 block "$$" 'killall -r herd' 'cannot be resolved to processes'
+block "$$" 'killall /usr/bin/herdr' 'cannot be resolved to processes'
+block "$$" 'echo $(kill 1)' 'PID 1 (init)'
+block "$$" 'echo `kill 1`' 'PID 1 (init)'
+block "$$" 'echo $(kill -9 $(pgrep -x herdr))' 'cannot be resolved to processes'
+block "$$" 'x=$(kill -9 $(pgrep herdr))' 'cannot be resolved to processes'
+block "$$" 'ionice -c3 kill 1' 'PID 1 (init)'
+block "$$" 'taskset -c 0 kill 1' 'PID 1 (init)'
+block "$$" 'stdbuf -oL kill 1' 'PID 1 (init)'
+block "$$" 'doas kill 1' 'PID 1 (init)'
+block "$$" 'if false; then :; elif kill 1; then :; fi' 'PID 1 (init)'
+block "$$" 'case 1 in 1) kill 1;; esac' 'PID 1 (init)'
+block "$$" 'f() { kill 1; }; f' 'PID 1 (init)'
 allow "$$" "kill $C"
 allow "$$" "kill $C 2>/dev/null"
 allow "$$" "kill $C 2>&1"

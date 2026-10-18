@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
 const MODELLED = { kill: "lL", pkill: "f", killall: "" }; // options the guard reads; any other option refuses
-const WRAPPERS = /^(sudo|env|nohup|exec|command|builtin|time|nice|timeout|setsid|xargs|then|do|else|if|while|until)$/;
+const WRAPPERS = /^(sudo|env|nohup|exec|command|builtin|time|nice|ionice|taskset|stdbuf|timeout|setsid|doas|runuser|chrt|flock|unbuffer|xargs|then|do|else|if|elif|case|while|until|\{|[\w.-]+\(\))$/;
 const SIGNAL = /^-(\d+|[A-Z][A-Z0-9]*)$/; // -9, -KILL, -SIGTERM
 const REDIRECT = /^\d*[<>]|^&>/;
 const CMD = /^(kill|pkill|killall|eval|(ba|z|da)?sh|xargs)$/;
@@ -94,6 +94,7 @@ function judge(name, args, text, caller, procs) {
 		hits = ops.map((a) => procs().get(+a) ?? { pid: +a, missing: true });
 	} else {
 		if (ops.some((o) => /[$`]/.test(o))) return unresolved("the pattern is set by the shell");
+		if (name === "killall" && ops.some((o) => o.includes("/"))) return unresolved("a name with a slash selects processes by executable path");
 		let test = (p) => ops.includes(p.comm) || ops.includes(basename(p.argv[0] ?? ""));
 		if (name === "pkill") {
 			if (/[\\[{]/.test(ops[0])) return unresolved("the pattern uses regex syntax that pkill and JavaScript read differently");
@@ -111,11 +112,33 @@ function judge(name, args, text, caller, procs) {
 	return reason ? `"${text}" aims at ${reason}` : null;
 }
 
+// Every $( ) and backtick body, nested $( ) included.
+function substitutions(text) {
+	const out = [];
+	for (let i = 0; i < text.length; i++) {
+		if (text[i] === "`") {
+			const end = text.indexOf("`", i + 1);
+			if (end < 0) break;
+			out.push(text.slice(i + 1, end));
+			i = end;
+		} else if (text[i] === "$" && text[i + 1] === "(") {
+			let depth = 0, j = i + 1;
+			for (; j < text.length; j++) {
+				if (text[j] === "(") depth++;
+				else if (text[j] === ")" && --depth === 0) break;
+			}
+			out.push(text.slice(i + 2, j));
+			i = j;
+		}
+	}
+	return out;
+}
+
 // The first kill, pkill or killall in the command (also inside sh -c, eval, $( ) or backticks) aimed outside the caller's tree.
 function blockedBy(command, caller, procs) {
 	for (const seg of segments(command)) {
 		const text = seg.trim().replace(/^[\s({!]+/, "");
-		const inner = [...text.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)].map((m) => m[1] ?? m[2]);
+		const inner = substitutions(text);
 		const { words: w, piped } = commandOf(words(text));
 		const name = w.length ? commandName(w[0]) : "";
 		const shellC = /^(ba|z|da)?sh$/.test(name) ? w.findIndex((t, k) => k > 0 && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(t)) : -1;
