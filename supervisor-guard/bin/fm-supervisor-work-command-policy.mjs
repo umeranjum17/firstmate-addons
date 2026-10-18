@@ -112,7 +112,7 @@ function typedIntoPane(position) {
 
 // One pass over the top-level command positions, because (b) is a property of
 // the whole command: a loop and its sleep are separate command positions.
-function decision(command, options = {}) {
+export function decision(command, options = {}) {
   const { Lexer, splitProgram, commandPosition } = shell;
   const secondmate = Boolean(options.secondmate);
   const scan = new Lexer(command).tokenize();
@@ -147,5 +147,3 @@ function decision(command, options = {}) {
   }
   return ALLOW;
 }
-
-export { decision };
