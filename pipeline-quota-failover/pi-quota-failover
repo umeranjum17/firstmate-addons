@@ -147,22 +147,31 @@ drop_session() {
   done
 }
 
-# run_watched <args...>: the real pi with the captured stdin re-attached, killed (TERM, then KILL after a grace)
-# once it writes no stdout and no stderr for idle_secs. Sets idle_killed=1 when it did that kill.
+# end_pi <pid> <sig>: sends sig to pi's process group, then KILLs the group after a 5s grace.
+end_pi() {
+  local g
+  kill -"$2" -- "-$1" 2>/dev/null
+  for ((g = 0; g < 5; g++)); do kill -0 "$1" 2>/dev/null || break; sleep 1; done
+  kill -KILL -- "-$1" 2>/dev/null
+}
+
+# run_watched <args...>: the real pi with the captured stdin re-attached, in its own process group. A received INT or
+# TERM ends that group and sets stop_sig; no stdout and no stderr for idle_secs ends it the same way and sets
+# idle_killed=1.
 run_watched() {
-  local pid='' sizes seen='' last now g s
+  local pid='' sizes seen='' last now s
   idle_killed=0 stop_sig=0
-  trap 'stop_sig=INT; [ -z "$pid" ] || kill -INT -- "-$pid" 2>/dev/null' INT
-  trap 'stop_sig=TERM; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null' TERM
+  trap 'stop_sig=INT' INT
+  trap 'stop_sig=TERM' TERM
   if [ "$stop_sig" != 0 ]; then trap - INT TERM; return 1; fi
   set -m
   "$real_pi" "$@" <"$stdin_file" >"$out_file" 2>"$err_file" &
   pid=$!
   set +m
-  [ "$stop_sig" = 0 ] || kill -"$stop_sig" -- "-$pid" 2>/dev/null
   last=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
+    if [ "$stop_sig" != 0 ]; then end_pi "$pid" "$stop_sig"; break; fi
     sizes=$(stat -c %s "$out_file" "$err_file" 2>/dev/null | tr '\n' ' ')
     now=$(date +%s)
     if [ "$sizes" != "$seen" ]; then
@@ -171,9 +180,7 @@ run_watched() {
     elif [ $((now - last)) -ge "$idle_secs" ]; then
       idle_killed=1
       log_line "pi produced no output for ${idle_secs}s; killing it"
-      kill -TERM -- "-$pid" 2>/dev/null
-      for ((g = 0; g < 5; g++)); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-      kill -KILL -- "-$pid" 2>/dev/null
+      end_pi "$pid" TERM
       break
     fi
   done
@@ -254,6 +261,7 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
   t1=$(date +%s%3N)
   if [ "$stop_sig" != 0 ]; then
     quota=0
+    rc=$((128 + $(kill -l "$stop_sig")))
   elif [ "$idle_killed" = 1 ]; then
     quota=1
     detail="no output for ${idle_secs}s"

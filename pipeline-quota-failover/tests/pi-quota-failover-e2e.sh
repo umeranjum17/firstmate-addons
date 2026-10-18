@@ -55,7 +55,11 @@ for a in "$@"; do
   prev=$a
 done
 case $model in
-  bad/hang) sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
+  bad/hang)
+    trap 'printf INT >>"$STUB_SIG"; exit 0' INT
+    trap 'printf TERM >>"$STUB_SIG"; exit 0' TERM
+    sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
+  bad/stubborn) trap '' TERM; sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; while :; do sleep 1; done ;;
   bad/grace) trap 'sleep 2; exit 143' TERM; while :; do sleep 1; done ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
@@ -108,7 +112,7 @@ chmod +x "$stub/quota-axi"
 
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
-export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child
+export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child STUB_SIG=$work/sig
 PATH="$stub:$PATH"
 prompt='Reply with the single word PONG.'
 # Quota-dead markers: cleared before journeys that need every model tried.
@@ -306,9 +310,10 @@ if [ $(($(date +%s) - t0)) -lt 10 ]; then ok "silent hang failed over in under 1
 fresh "hung route gets a dead marker" bad/hang
 if child_gone; then ok "idle kill reached the tool child"; else no "tool child survived the idle kill"; fi
 
-# 9g. TERM to the wrapper while its pi is silent (idle path) reaches pi: the wrapper exits with pi's status, no failover.
+# 9g. TERM to the wrapper while its pi is silent reaches pi: the wrapper exits 143 even though pi exits 0, no failover.
 nodead
 : >"$STUB_ARGV"
+: >"$STUB_SIG"
 rm -f "$STUB_CHILD"
 printf '%s' "$prompt" >"$work/prompt9g"
 PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9g" 2>"$work/err9g" &
@@ -318,8 +323,9 @@ for _ in $(seq 50); do [ -s "$STUB_CHILD" ] && break; sleep 0.1; done
 kill -TERM "$wpid"
 wait "$wpid"
 rc=$?
-is "TERM to a silent wrapper exits with pi's status" "$rc" "143"
+is "TERM to a silent wrapper exits 143" "$rc" "143"
 if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "TERM stopped the silent pi promptly"; else no "TERM to a silent wrapper took $(($(date +%s) - t0))s"; fi
+is "pi received the forwarded TERM" "$(cat "$STUB_SIG")" "TERM"
 is "no failover after TERM" "$(wc -l <"$STUB_ARGV")" "1"
 if child_gone; then ok "TERM reached the tool child"; else no "tool child survived TERM"; fi
 
@@ -327,6 +333,7 @@ if child_gone; then ok "TERM reached the tool child"; else no "tool child surviv
 # Launched under job control so the wrapper does not inherit an ignored SIGINT.
 nodead
 : >"$STUB_ARGV"
+: >"$STUB_SIG"
 rm -f "$STUB_CHILD"
 set -m
 PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/hang claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/hang --mode json --no-session <"$work/prompt9g" >"$work/out9h" 2>"$work/err9h" &
@@ -337,10 +344,27 @@ for _ in $(seq 50); do [ -s "$STUB_CHILD" ] && break; sleep 0.1; done
 kill -INT "$wpid"
 wait "$wpid"
 rc=$?
-is "INT to a silent wrapper exits with pi's status" "$rc" "130"
+is "INT to a silent wrapper exits 130" "$rc" "130"
 if [ "$(($(date +%s) - t0))" -lt 30 ]; then ok "INT stopped the silent pi promptly"; else no "INT to a silent wrapper took $(($(date +%s) - t0))s"; fi
+is "pi received the forwarded INT" "$(cat "$STUB_SIG")" "INT"
 is "no failover after INT" "$(wc -l <"$STUB_ARGV")" "1"
-kill "$(cat "$STUB_CHILD" 2>/dev/null)" 2>/dev/null
+if child_gone; then ok "INT stop reached the tool child"; else no "tool child survived INT"; fi
+
+# 9k. A pi that ignores TERM is KILLed after the grace, its tool child with it: the wrapper exits 143, no failover.
+nodead
+: >"$STUB_ARGV"
+rm -f "$STUB_CHILD"
+PI_QUOTA_FAILOVER_IDLE_SECS=60 PI_QUOTA_FAILOVER_CHAIN='bad/stubborn claude-bridge/claude-haiku-5-5' "$wrapper" --model bad/stubborn --mode json --no-session <"$work/prompt9g" >"$work/out9k" 2>"$work/err9k" &
+wpid=$!
+for _ in $(seq 50); do [ -s "$STUB_CHILD" ] && break; sleep 0.1; done
+kill -TERM "$wpid"
+for _ in $(seq 300); do case $(ps -o stat= -p "$wpid" 2>/dev/null) in ''|Z*) break ;; esac; sleep 0.1; done
+kill -KILL "$wpid" 2>/dev/null
+wait "$wpid"
+rc=$?
+is "TERM-ignoring pi: wrapper exits 143" "$rc" "143"
+is "TERM-ignoring pi: no failover" "$(wc -l <"$STUB_ARGV")" "1"
+if child_gone; then ok "TERM-ignoring pi's tool child was KILLed"; else no "tool child survived the KILL escalation"; fi
 
 # 9i. TERM to the wrapper during the idle-kill grace window (pi ignores TERM for 2s after going silent) stops the
 # call: no failover to the next model, pi's status passes through.
