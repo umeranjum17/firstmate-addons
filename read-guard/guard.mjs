@@ -3,21 +3,32 @@ import { homedir } from "node:os";
 
 const homes = [...new Set([process.env.HOME, homedir()].filter(Boolean).map((h) => h.replace(/\/+$/, "")))];
 const sensitive = [
-  /(?:^|\/)\.codex(?:\/.*)?$/,
-  /(?:^|\/)\.local\/share\/opencode(?:\/.*)?$/,
-  /(?:^|\/)\.pi\/agent(?:\/.*)?$/,
-  /(?:^|\/)\.claude\/(?:\.credentials[^/]*|\*[^/]*)$/,
+  /(?:^|\/)\.codex(?:\/(?:\*{1,2})?\/?)?$/,
+  /(?:^|\/)\.codex\/auth[^/]*$/,
+  /(?:^|\/)\.local\/share\/opencode(?:\/(?:\*{1,2})?\/?)?$/,
+  /(?:^|\/)\.local\/share\/opencode\/auth[^/]*$/,
+  /(?:^|\/)\.pi\/agent(?:\/(?:\*{1,2})?\/?)?$/,
+  /(?:^|\/)\.pi\/agent\/auth[^/]*$/,
+  /(?:^|\/)\.claude\/(?:\.credentials[^/]*)$/,
   /(?:^|\/)\.claude$/,
-  /(?:^|\/)\.no-mistakes(?:\/.*)?$/,
+  /(?:^|\/)\.no-mistakes(?:\/(?:\*{1,2})?\/?)?$/,
+  /(?:^|\/)\.no-mistakes\/config\.ya?ml$/,
   /(?:^|\/)\.local\/state\/crewhouse\/people\/[^/]+(?:\/.*)?$/,
   /(?:^|\/)\.local\/share\/byokit\/people\/[^/]+(?:\/.*)?$/,
   /(?:^|\/)\.cache\/o6-tmp\/[^/]*\/people\/[^/]+(?:\/.*)?$/,
 ];
+const protectedFiles = ["~/.codex/auth.json", "~/.local/share/opencode/auth.json", "~/.pi/agent/auth.json", "~/.claude/.credentials.json", "~/.no-mistakes/config.yaml", "~/.no-mistakes/config.yml"];
 const metadata = new Set(["ls", "stat", "test", "["]);
 
 function tokens(command) {
   return (command.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;|&<>]+/g) ?? [])
     .map((s) => s.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, (_, d, q) => d ?? q));
+}
+
+function globMatches(pattern, path) {
+  if (!pattern.includes("*") && !pattern.includes("?")) return false;
+  const re = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("**", "\0").replaceAll("*", "[^/]*").replaceAll("?", "[^/]").replaceAll("\0", ".*");
+  return new RegExp(`^${re}$`).test(path);
 }
 
 function protectedReference(text) {
@@ -26,7 +37,7 @@ function protectedReference(text) {
   for (let value of fragments) {
     value = value.replaceAll("${HOME}", "~").replaceAll("$HOME", "~");
     for (const home of homes) if (value === home || value.startsWith(home + "/")) value = "~" + value.slice(home.length);
-    if (sensitive.some((rule) => rule.test(value))) return value;
+    if (sensitive.some((rule) => rule.test(value)) || protectedFiles.some((path) => globMatches(value, path))) return value;
   }
   return null;
 }

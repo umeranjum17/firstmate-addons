@@ -33,11 +33,19 @@ for cmd in \
   'rsync ~/.local/share/opencode/ x' \
   'cd ~/.local/share/opencode && cat auth.json' \
   'cat ~/.claude' \
+  'cat ~/.codex/*' \
+  'cat ~/.codex/a*' \
+  'grep -r secret ~/.no-mistakes' \
   'cp -r ~/.local/share/byokit/people/1 /tmp'; do block "$cmd"; done
+# Non-secret files and runtime session data remain readable.
+allow 'cat ~/.pi/agent/sessions/x/y.jsonl'
+allow 'cat ~/.codex/config.toml'
+allow 'ls ~/.no-mistakes/evidence'
+allow 'grep -r foo ~/.pi/agent/sessions'
 # 13:38Z BYOKit stored credential path.
 block 'cat ~/.local/share/byokit/people/1/auth.json'
 # 13:39Z Python one-liner embeds the absolute fixture path in a code token.
-block "python3 -c \\\"print(open('$H/.pi/agent/auth.json').read())\\\""
+block "python3 -c \"print(open('$H/.pi/agent/auth.json').read())\""
 # 13:39Z Node one-liner concatenates HOME with a protected-path suffix.
 block 'node -e "console.log(require(\\"fs\\").readFileSync(process.env.HOME+\\"/.pi/agent/auth.json\\",\\"utf8\\"))"'
 # 13:39Z heredoc body also contains a protected credential path.
@@ -74,6 +82,7 @@ node --input-type=module - "$G" "$H" <<'EOF'
 const { guardTool } = await import(process.argv[2]); const home = process.argv[3];
 for (const [tool, input] of [["read", {path:`${home}/.codex/auth.json`}], ["Read", {file_path:`${home}/.claude/.credentials.json`}], ["Grep", {path:`${home}/.pi/agent/auth.json`}], ["Grep", {path:"~/.codex"}], ["Glob", {pattern:`${home}/.local/share/opencode/auth*`}]])
   if (!guardTool(tool, input)?.includes("fleet read guard")) throw Error(`${tool} was allowed`);
+if (guardTool("Grep", {path:"~/.pi/agent/sessions"})) throw Error("Claude Grep over sessions was blocked");
 EOF
 # Guarding is at the agent boundary: normal process/library reads of fixture credentials still work.
 printf 'fixture-secret' > "$H/.codex/auth.json"
