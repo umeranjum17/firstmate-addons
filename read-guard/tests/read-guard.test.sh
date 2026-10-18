@@ -92,6 +92,8 @@ for (const [tool, input] of [["read", {path:`${home}/.codex/auth.json`}], ["Read
 if (guardTool("Grep", {path:"~/.pi/agent/sessions"})) throw Error("Claude Grep over sessions was blocked");
 // Pi write of a markdown report: its content is body text, so bold markers and question marks pass.
 if (guardTool("write", {path:`${home}/report.md`, content:`Status ${"\x2a\x2a"} why? ${"\x2a\x2a"} done`})) throw Error("Pi write of markdown report was blocked");
+// Pi find takes a glob pattern, so a home-rooted codex login glob is still blocked.
+if (!guardTool("find", {path:home, pattern:"~/.codex/a*"})?.includes("fleet read guard")) throw Error("Pi find of codex login glob was allowed");
 EOF
 # Guarding is at the agent boundary: normal process/library reads of fixture credentials still work.
 printf 'fixture-secret' > "$H/.codex/auth.json"

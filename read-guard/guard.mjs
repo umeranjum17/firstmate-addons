@@ -81,7 +81,7 @@ export function guardTool(tool, input) {
     : Array.isArray(value) ? value.map(scan).find(Boolean)
     : value && typeof value === "object" ? Object.values(value).map(scan).find(Boolean) : null;
   // Only path-like fields name a file; body text such as write content or edit strings is never a path.
-  const named = Object.entries(input ?? {}).filter(([key]) => pathFields.has(key) || (key === "pattern" && /^glob$/i.test(tool)));
+  const named = Object.entries(input ?? {}).filter(([key]) => pathFields.has(key) || (key === "pattern" && /^(glob|find)$/i.test(tool)));
   return named.some(([, value]) => scan(value)) ? `BLOCKED by the fleet read guard: protected file access. This block is final: do not retry, reword, or work around it.` : null;
 }
 
