@@ -191,11 +191,8 @@ run_watched() {
       break
     fi
   done
-  while :; do
-    wait "$pid"
-    s=$?
-    kill -0 "$pid" 2>/dev/null || break
-  done
+  wait "$pid"
+  s=$?
   return "$s"
 }
 
