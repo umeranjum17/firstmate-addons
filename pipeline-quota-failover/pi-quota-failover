@@ -264,6 +264,7 @@ if [ ${#live[@]} -gt 0 ] && [ "${live[0]}" != "$requested" ]; then
 fi
 order=("${live[@]}")
 any_stall=0
+stall_retried=0
 for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
   model=${order[$attempt]}
   t0=$(date +%s%3N)
@@ -298,6 +299,14 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
     kind="quota-error"
   else
     kind="stalled"
+  fi
+  # A silent call on the last route gets one more try on that route: the stalls seen on Haiku were per call, and a
+  # retry is cheaper than failing the pipeline step. A second stall fails the call as before.
+  if [ "$kind" = stalled ] && [ $((attempt + 1)) -ge ${#order[@]} ] && [ "$stall_retried" = 0 ]; then
+    stall_retried=1
+    log_line "model=$model stalled in $((t1 - t0))ms (no output for ${idle_secs}s); retrying it once"
+    attempt=$((attempt - 1))
+    continue
   fi
   if [ $((attempt + 1)) -lt ${#order[@]} ]; then
     next=${order[$((attempt + 1))]}
