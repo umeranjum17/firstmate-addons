@@ -5,7 +5,12 @@ set -euo pipefail
 addons=$(cd "$(dirname "$0")/../.." && pwd)
 : "${FM_TEST_FORK:?set FM_TEST_FORK to a Firstmate checkout}"
 d=$(mktemp -d)
-trap 'rm -rf -- "$d"' EXIT
+cleanup() {
+  rc=$?
+  if [ "$rc" -eq 0 ]; then rm -rf -- "$d"
+  else printf 'fixture retained: %s\nproduction output: %s/out\n' "$d" "$d" >&2; fi
+}
+trap cleanup EXIT
 export HOME=$d/user XDG_CONFIG_HOME=$d/xdg-config XDG_DATA_HOME=$d/xdg-data TMPDIR=$d/tmp
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
@@ -43,7 +48,7 @@ run_merge() { FM_HOME=$home bash "$d/fork/bin/fm-merge-local.sh" task > "$d/out"
 for mode in present absent; do
   home=$d/$mode
   repo=$home/project
-  mkdir -p "$home/state" "$home/config"
+  mkdir -p "$home/state" "$home/config" "$home/data"
   printf 'manual\n' > "$home/config/backlog-backend"
   git init -q -b main "$repo"
   git -C "$repo" config user.name Umer
