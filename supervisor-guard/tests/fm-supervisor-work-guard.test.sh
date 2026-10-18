@@ -42,18 +42,18 @@ make_home() {
 FMH=$(cd "$TMP" && pwd -P)/fmhome
 make_home "$FMH"
 
-# run_hook <command> <session-dir> [--claude]: the installed hook on one Bash payload.
+# run_hook <command> <session-dir>: the installed hook on one Bash payload.
 run_hook() {
   local payload
   payload=$(jq -nc --arg c "$1" --arg d "$2" '{tool_input: {command: $c}, cwd: $d}')
-  printf '%s' "$payload" | CLAUDE_PROJECT_DIR="$2" "$HOOK" ${3:+"$3"}
+  printf '%s' "$payload" | CLAUDE_PROJECT_DIR="$2" "$HOOK"
 }
 
 # expect <want-exit> <command> [session-dir] [deny-code]: exit status, empty stdout,
 # and on deny the Claude decision object naming the code; on allow, empty stderr.
 expect() {
   local want=$1 command=$2 session=${3:-$FMH} code=${4:-} rc=0
-  run_hook "$command" "$session" --claude >"$TMP/out" 2>"$TMP/err" || rc=$?
+  run_hook "$command" "$session" >"$TMP/out" 2>"$TMP/err" || rc=$?
   [ "$rc" = "$want" ] || return 1
   [ ! -s "$TMP/out" ] || return 1
   if [ "$want" = 0 ]; then
@@ -80,7 +80,7 @@ cp "$SETTINGS" "$TMP/settings.once"
 check cmp -s "$SETTINGS" "$TMP/settings.once"
 
 CHECK_NAME="primary session denies a no-mistakes run with exit 2 and stdout empty"
-out=$(run_hook 'no-mistakes axi run --intent x' "$FMH" --claude 2>"$TMP/err")
+out=$(run_hook 'no-mistakes axi run --intent x' "$FMH" 2>"$TMP/err")
 rc=$?
 check test "$rc" = 2 && check test -z "$out" && check jq -e '.systemMessage | startswith("[supervisor-no-mistakes-run]")' "$TMP/err"
 
@@ -113,12 +113,8 @@ check expect 0 'for f in *.log; do wc -l "$f"; done'
 CHECK_NAME="sleep inside quoted data is not a sleep"
 check expect 0 "git commit -m 'never sleep 90 in a turn'"
 
-CHECK_NAME="without --claude the deny is also written to stdout"
-out=$(run_hook 'sleep 120' "$FMH" 2>/dev/null)
-check jq -e '.decision == "deny"' <<< "$out"
-
 CHECK_NAME="a malformed payload fails open with no output"
-out=$(printf '%s' 'not json at all' | CLAUDE_PROJECT_DIR="$FMH" "$HOOK" --claude 2>"$TMP/err")
+out=$(printf '%s' 'not json at all' | CLAUDE_PROJECT_DIR="$FMH" "$HOOK" 2>"$TMP/err")
 rc=$?
 check test "$rc" = 0 && check test -z "$out" && check test ! -s "$TMP/err"
 

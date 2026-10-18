@@ -9,26 +9,22 @@
 set -u
 
 DEST=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P) || exit 0
-CLAUDE=0
-CMD=""
-CMD_SET=0
-while ((${#@} > 0)); do
-  case "$1" in
-    --claude) CLAUDE=1; shift ;;
-    --command) CMD=${2-}; CMD_SET=1; shift $(( $# > 1 ? 2 : 1 )) ;;
-    *) exit 0 ;;
-  esac
-done
 
 command -v jq >/dev/null 2>&1 || { echo "fm-supervisor-work: jq missing, guard off" >&2; exit 0; }
 FMH=$(head -n 1 "$DEST/home" 2>/dev/null) || { echo "fm-supervisor-work: no home file, guard off" >&2; exit 0; }
 
-if ((CMD_SET == 0)); then
-  PAYLOAD=$(cat)
-  CMD=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.command // .toolInput.command // empty' 2>/dev/null) || exit 0
-  SESSION_CWD=$(printf '%s' "$PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null) || SESSION_CWD=""
+PAYLOAD=$(cat)
+CMD=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.command // .toolInput.command // empty' 2>/dev/null) || exit 0
+SESSION_CWD=$(printf '%s' "$PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null) || SESSION_CWD=""
+
+# A command that names none of these cannot match the policy, so node is skipped.
+# ANSI-C and locale quoting can spell a word in escapes, so those always reach node.
+ESCAPED_QUOTE=0
+case $CMD in *'$'\'*|*'$"'*) ESCAPED_QUOTE=1 ;; esac
+if ((ESCAPED_QUOTE == 0)); then
+  PLAIN=${CMD//[\"\'\\]/}
+  case $PLAIN in *no-mistakes*|*sleep*|*herdr*|*tmux*) ;; *) exit 0 ;; esac
 fi
-[[ -n $CMD ]] || exit 0
 
 # Scope: only the session that runs in the registered home is judged. A linked
 # worktree of that home, or any other repo, is a worker and stays untouched.
@@ -49,5 +45,4 @@ IFS=$'\t' read -r KIND CODE REASON <<< "$VERDICT"
 MESSAGE="[$CODE] $REASON"
 jq -nc --arg m "$MESSAGE" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny"}, systemMessage: $m}' >&2
-[ "$CLAUDE" -eq 1 ] || jq -nc --arg m "$MESSAGE" '{decision: "deny", reason: $m}'
 exit 2

@@ -148,4 +148,4 @@ function decision(command, options = {}) {
   return ALLOW;
 }
 
-export { decision, MAX_TURN_SLEEP_SECONDS };
+export { decision };

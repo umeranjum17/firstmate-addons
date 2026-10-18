@@ -39,7 +39,7 @@ put() {
 # The hook runs only in a Claude session: Grok sets GROK_AGENT or GROK_HOOK_EVENT,
 # and the guard is registered for Claude alone.
 HOOK="$DEST/fm-supervisor-work-pretool-check.sh"
-CMD="[ -z \"\${GROK_AGENT:-}\${GROK_HOOK_EVENT:-}\" ] || exit 0; exec '$HOOK' --claude"
+CMD="[ -z \"\${GROK_AGENT:-}\${GROK_HOOK_EVENT:-}\" ] || exit 0; exec '$HOOK'"
 [ -s "$SETTINGS" ] && cat "$SETTINGS" > "$TMP/before.json" || echo '{}' > "$TMP/before.json"
 # shellcheck disable=SC2016 # $cmd is a jq variable
 jq --arg cmd "$CMD" '

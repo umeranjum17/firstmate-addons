@@ -35,7 +35,7 @@ Any failure to confirm the home is inert, never a block, so a broken environment
 
 ## Shipped mechanism
 
-`bin/fm-supervisor-work-pretool-check.sh` reads the harness payload, extracts the exact command, and passes it to the decider; it owns no pattern and has no prefilter.
+`bin/fm-supervisor-work-pretool-check.sh` reads the harness payload, extracts the exact command, skips node when no quote-stripped word names no-mistakes, sleep, herdr or tmux, and otherwise passes the command to the decider; it owns no pattern.
 
 `install.sh` copies the hook, the decider and the policy into `${XDG_DATA_HOME:-$HOME/.local/share}/fm-supervisor-guard` and records the Firstmate home in its `home` file. The scope predicate and the shell lexer are read from that home's checkout (`bin/fm-primary-scope-lib.sh` and `bin/fm-arm-command-policy.mjs`), so the add-on copies no shell lexing and no upstream code.
 
@@ -44,22 +44,21 @@ Because `for i in ...; do sleep 5; done` lexes as one node whose command word is
 
 ## Harness registrations
 
-- Claude: `install.sh` merges one PreToolUse `Bash` hook into `~/.claude/settings.json`, running the installed hook with `--claude`. `uninstall.sh` removes it.
+- Claude: `install.sh` merges one PreToolUse `Bash` hook into `~/.claude/settings.json`. `uninstall.sh` removes it.
 
-The add-on registers only this Claude hook. The payload also accepts a Grok-shaped `toolInput` and a `--command` argument, which the hook still reads, but no install path registers them.
+The add-on registers only this Claude hook, which reads the Claude payload from stdin.
 
 ## Exit/output contract
 
 The same contract as the other Firstmate PreToolUse seatbelts:
 
 - ALLOW - exit 0 and no output.
-- DENY - exit 2, a Claude-shaped deny object on stderr, and a Grok-shaped deny object on stdout unless `--claude` was supplied. Installed hooks always pass `--claude`, so stdout stays empty.
+- DENY - exit 2 and a Claude-shaped deny object on stderr; stdout stays empty.
 - INERT - not a genuine supervisor home: exit 0 and no output.
 - FAIL OPEN - malformed or empty stdin, missing jq for stdin transport, or a missing Node runtime or policy owner.
 
 Claude requires stdout to remain empty on deny.
 Codex blocks on exit 2 and displays stderr.
-Grok consumes the stdout decision object.
 
 ## Validation
 

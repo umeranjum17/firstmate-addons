@@ -9,8 +9,8 @@ Kun's Firstmate has no such guard.
 ## Layout
 
 - `bin/fm-supervisor-work-pretool-check.sh` — the hook. It scopes to the one home
-  it was installed for, reads the Bash command from the hook payload (or
-  `--command`), asks the decider, and writes the deny object. Fails open.
+  it was installed for, prefilters the Bash command in shell, asks the decider,
+  and writes the deny object on stderr. Fails open.
 - `bin/fm-supervisor-work-decide.mjs` — the command-line entry for the policy.
   It loads the shell lexer from the checkout named by `--lexer`.
 - `bin/fm-supervisor-work-command-policy.mjs` — the rules and the allow/deny
@@ -36,8 +36,10 @@ both with no merge here.
   `CLAUDE_PROJECT_DIR`, else the hook payload's `cwd` git root.
 - Fail open: missing `jq`, `node`, the home file, the scope lib or the lexer
   each print one stderr line naming the cause, then allow.
-- Deny: exit 2 with the deny object on stderr. Without `--claude`, the same deny
-  object is also written to stdout.
+- Prefilter: a command naming none of `no-mistakes`, `sleep`, `herdr` or `tmux`,
+  once quotes and backslashes are stripped, is allowed without starting node.
+  A command with ANSI-C or locale quoting always reaches the policy.
+- Deny: exit 2 with the deny object on stderr.
 
 ## Status
 
