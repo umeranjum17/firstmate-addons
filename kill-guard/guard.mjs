@@ -15,7 +15,7 @@ function segments(command) {
 	const out = [""];
 	for (let i = 0, q = ""; i < command.length; i++) {
 		const c = command[i];
-		if (!q && ";|&\n".includes(c)) out.push("");
+		if (!q && (";|\n".includes(c) || (c === "&" && !/[<>]/.test(command[i - 1] ?? "") && command[i + 1] !== ">"))) out.push("");
 		else if (c === "\\" && q !== "'") out[out.length - 1] += c + (command[++i] ?? "");
 		else {
 			if (c === q) q = "";
@@ -26,7 +26,18 @@ function segments(command) {
 	return out;
 }
 
-const words = (s) => (s.match(/(?:"[^"]*"|'[^']*'|\S)+/g) ?? []).map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, "$1$2"));
+const REDIRECT = /^\d*[<>]|^&>/; // a word that starts a redirection: 2>/dev/null, >f, &>f, 2>&1
+
+// The words of a simple command with its redirections dropped, so `kill 4242 2>/dev/null` has one operand.
+const words = (s) => {
+	const raw = s.match(/(?:"[^"]*"|'[^']*'|\S)+/g) ?? [];
+	const out = [];
+	for (let i = 0; i < raw.length; i++) {
+		if (!REDIRECT.test(raw[i])) out.push(raw[i]);
+		else if (/^(\d*|&)[<>]+&?$/.test(raw[i])) i++; // the target is the next word: 2> /dev/null
+	}
+	return out.map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, "$1$2"));
+};
 
 // The command word past assignments and wrappers: `nice -n 5 kill 1` is a kill of 1. xargs means the targets come from stdin.
 function commandOf(w) {

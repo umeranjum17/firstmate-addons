@@ -24,7 +24,39 @@ inst --dry-run > "$T/dry.out"
 inst > /dev/null && inst > "$T/reinstall.out"
 [ "$(grep -c '^unchanged: ' "$T/reinstall.out")" -eq 4 ] && ok "reinstall changes nothing" || no "reinstall not idempotent: $(cat "$T/reinstall.out")"
 jq -e '([.hooks.PreToolUse[].hooks[].command] | index("other-hook") == 0) and ([.hooks.PreToolUse[].hooks[].command | select(contains("fm-kill-guard"))] | length == 1) and .env.KEEP == "1"' "$T/home/.claude/settings.json" >/dev/null && ok "claude settings merged once, existing settings kept" || no "claude settings merge"
-grep -q 'fm-kill-guard/guard.mjs' "$T/home/.pi/agent/extensions/fm-kill-guard.ts" && grep -q 'fm-kill-guard/guard.mjs' "$T/home/.config/opencode/plugins/fm-kill-guard.js" && ok "pi and opencode adapters installed" || no "adapters not installed"
+cat > "$T/adapters.mjs" <<'EOF'
+import { spawn } from "node:child_process";
+const [, , file] = process.argv;
+const mod = await import(file);
+const check = file.endsWith(".ts") ? piCheck(mod.default) : openCodeCheck(await mod.FmKillGuard({}));
+function piCheck(ext) {
+  const handlers = {};
+  ext({ on: (name, h) => (handlers[name] = h) });
+  return async (tool, command) => (await handlers.tool_call({ toolName: tool, input: { command } }))?.reason ?? null;
+}
+function openCodeCheck(hooks) {
+  return async (tool, command) => {
+    try { await hooks["tool.execute.before"]({ tool }, { args: { command } }); return null; } catch (e) { return e.message; }
+  };
+}
+const child = spawn("sleep", ["300"]);
+const out = {
+  kill1: await check("bash", "kill 1"),
+  own: await check("bash", `kill ${child.pid}`),
+  ownRedirect: await check("bash", `kill ${child.pid} 2>/dev/null`),
+  nonBash: await check("read", "kill 1"),
+};
+child.kill();
+console.log(JSON.stringify(out));
+EOF
+adapter() { node "$T/adapters.mjs" "$1" 2>"$T/adp.err" || true; }
+adapter_ok() {
+  local out
+  out=$(adapter "$2")
+  jq -e '(.kill1 | contains("PID 1 (init)")) and .own == null and .ownRedirect == null and .nonBash == null' <<<"$out" >/dev/null && ok "$1 adapter runs the guard" || no "$1 adapter: $out $(cat "$T/adp.err")"
+}
+adapter_ok pi "$T/home/.pi/agent/extensions/fm-kill-guard.ts"
+adapter_ok opencode "$T/home/.config/opencode/plugins/fm-kill-guard.js"
 HOOK=$(jq -r '.hooks.PreToolUse[].hooks[] | select(.command | contains("fm-kill-guard")) | .command' "$T/home/.claude/settings.json")
 
 # The real systemd --user manager, when this host runs one (read only: never signalled).
@@ -71,6 +103,8 @@ block "$$" 'xargs kill' 'come from xargs'
 block "$$" 'pkill -u umer x' 'cannot be resolved to processes'
 block "$$" 'kill 99999999' 'no such process'
 allow "$$" "kill $C"
+allow "$$" "kill $C 2>/dev/null"
+allow "$$" "kill $C 2>&1"
 allow "$$" 'kill -l'
 allow "$$" 'echo kill 1'
 allow "$$" 'grep -r kill src'
