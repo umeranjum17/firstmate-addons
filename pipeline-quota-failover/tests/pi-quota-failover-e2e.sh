@@ -57,6 +57,7 @@ done
 case $model in
   bad/hang) sleep 600 & printf '%s\n' "$!" >"$STUB_CHILD"; wait; exit 0 ;;
   bad/graceful) trap 'exit 0' TERM; bash -c 'trap "sleep 2; touch \"\$STUB_CLEANUP\"; exit 0" TERM; sleep 600 & wait' & wait; exit 0 ;;
+  bad/quiet) printf '%s\n' "$$" >"$STUB_PI"; sleep 600; exit 0 ;;
   bad/stubborn) trap '' TERM; bash -c 'sleep 600 & printf "%s\n" "$!" >"$STUB_CHILD"; wait' & while :; do sleep 1; done ;;
   zai/glm-5.3-flash*) [ -n "${STUB_GLM_KILL:-}" ] && kill -TERM $$ ;;
 esac
@@ -109,9 +110,11 @@ chmod +x "$stub/quota-axi"
 
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
-export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child
+export HOME="$home" XDG_STATE_HOME="$work/state" STUB_CHILD=$work/child STUB_PI=$work/pi.pid
 PATH="$stub:$PATH"
 prompt='Reply with the single word PONG.'
+prompt_file=$work/prompt
+printf '%s' "$prompt" >"$prompt_file"
 # Quota-dead markers: cleared before journeys that need every model tried.
 dead=$work/state/pi-quota-failover-dead
 nodead() { rm -f -- "$dead"/*; }
@@ -336,6 +339,27 @@ OUT=$(printf '%s' "$prompt" | STUB_GLM_KILL=1 "$wrapper" --model zai/glm-5.3-fla
 rc=$?
 is "killed attempt exits with its status" "$rc" "143"
 is "killed attempt keeps the glm marker" "$(cat "$dead/zai%glm-5.3-flash")" "$before"
+
+# 9m. An INT to the wrapper's process group leaves no pi alive.
+nodead
+rm -f "$work/pi.pid"
+set -m
+"$wrapper" --model bad/quiet --mode json --no-session <"$prompt_file" >"$work/out9m" 2>"$work/err9m" &
+wpid=$!
+set +m
+for _ in $(seq 50); do [ -s "$work/pi.pid" ] && break; sleep 0.1; done
+spid=$(cat "$work/pi.pid" 2>/dev/null)
+is "quiet pi started before the INT" "${spid:+yes}" yes
+kill -INT -- "-$wpid" 2>/dev/null
+wait "$wpid" 2>/dev/null
+gone=no
+for _ in $(seq 30); do
+  s=$(ps -o stat= -p "$spid" 2>/dev/null | tr -d ' ')
+  case $s in ''|Z*) gone=yes; break ;; esac
+  sleep 0.1
+done
+kill -KILL "$spid" 2>/dev/null
+is "INT to the wrapper's group leaves no pi alive" "$gone" yes
 
 # 8. install.sh: key-level config edit in a throwaway config, never printing it.
 cfg=$work/config.yaml
