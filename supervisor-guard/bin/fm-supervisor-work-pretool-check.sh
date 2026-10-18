@@ -14,7 +14,7 @@ command -v jq >/dev/null 2>&1 || { echo "fm-supervisor-work: jq missing, guard o
 FMH=$(head -n 1 "$DEST/home" 2>/dev/null) || { echo "fm-supervisor-work: no home file, guard off" >&2; exit 0; }
 
 PAYLOAD=$(cat)
-CMD=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.command // .toolInput.command // empty' 2>/dev/null) || exit 0
+CMD=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 SESSION_CWD=$(printf '%s' "$PAYLOAD" | jq -r '.cwd // empty' 2>/dev/null) || SESSION_CWD=""
 
 # A command that names none of these cannot match the policy, so node is skipped.
