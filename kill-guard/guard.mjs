@@ -91,7 +91,7 @@ function judge(name, args, text, caller, procs) {
 	}
 	const unresolved = (why) => `"${text}" cannot be resolved to processes: ${why}`;
 	if (flags.some((f) => !MODELLED[name].includes(f))) return unresolved("an option the guard does not read");
-	if (!ops.length) return null;
+	if (!ops.length || (name === "kill" && flags.includes("l"))) return null;
 	let hits;
 	if (name === "kill") {
 		const bad = ops.find((a) => !/^[1-9]\d*$/.test(a));

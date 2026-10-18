@@ -54,6 +54,7 @@ block "$$" $'echo $((1<<2))\nkill -9 1' 'PID 1 (init)'
 block "$C" "kill $S" 'which this task did not start'
 allow "$$" "kill $C"
 allow "$$" "kill $C 2>/dev/null"
+allow "$$" 'kill -l 99999999'
 allow "$$" 'grep -r kill src'
 allow "$$" $'git commit -m "$(cat <<\'EOF\'\nkill stale lanes\nEOF\n)"'
 
