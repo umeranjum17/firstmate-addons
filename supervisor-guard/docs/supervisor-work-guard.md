@@ -2,8 +2,8 @@
 
 This document is the authoritative human-readable contract for the guard that stops a firstmate SUPERVISOR session from doing a worker's job.
 `bin/fm-supervisor-work-command-policy.mjs` is the single decision owner and the only place the patterns live.
-`bin/fm-supervisor-work-pretool-check.sh` is the harness transport, supervisor scope, and output renderer.
-The tracked harness adapters forward command text without classifying it.
+`bin/fm-supervisor-work-pretool-check.sh` is the hook transport, supervisor scope, and output renderer; `bin/fm-supervisor-work-decide.mjs` is its command-line entry.
+The hook passes the command text on untouched and classifies nothing itself.
 
 It belongs to the family of primary-session guards that share the same cross-harness hook machinery: the watcher-arm seatbelt (`docs/arm-pretool-check.md`), the cd-guard (`docs/cd-guard.md`), the subagent guard (`docs/subagent-guard.md`), and the turn-end supervision guard (`docs/turnend-guard.md`).
 
@@ -23,7 +23,7 @@ Three rules, each with one reason string:
 | `supervisor-pane-typing` | `herdr pane send-text`, `herdr pane send-keys`, `tmux send-keys` | Steer a worker with `bin/fm-send.sh` and drive its lifecycle with `bin/fm-control.sh`. The primary home is exempt; only a secondmate lead owns workers whose panes this would type into. |
 
 This is not a general sandbox.
-It classifies shell command positions only; it never evaluates, expands, sources, or runs any byte of the submitted command.
+It looks only at shell command positions; the submitted command is never evaluated, expanded, sourced or run.
 Its threat model is agent drift, the same as the cd-guard: ordinary well-formed shell, not a deliberately obfuscated bypass.
 
 ## Scope: supervisor sessions only
