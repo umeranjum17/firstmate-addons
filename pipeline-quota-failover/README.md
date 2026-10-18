@@ -17,5 +17,6 @@ An answer that is not parseable JSON is treated as not exhausted, without a log 
 
 ## Idle watchdog
 
-A pi call that writes no stdout and no stderr for `PI_QUOTA_FAILOVER_IDLE_SECS` (default 300) is killed with its process
-group (TERM, then KILL after a grace) and counts as a quota failure. SIGINT and SIGTERM sent to the wrapper are forwarded to pi's process group, so commands pi started are signalled too.
+A pi call that writes no stdout and no stderr for `PI_QUOTA_FAILOVER_IDLE_SECS` (default 300) is ended with TERM to pi
+and its direct children, then KILL of the same set after a 5 s grace, and counts as a quota failure. pi stays in the
+wrapper's process group, so a group kill of the wrapper reaches it.
