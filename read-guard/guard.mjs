@@ -58,8 +58,8 @@ function references(command) {
     if (target === null) continue;
     const refs = words.slice(1).filter(protectedToken);
     if (metadata.has(cmd) && refs.length && !/[`]|\$\(|<\(|>\(/.test(segment)) continue;
-    // Text-only commands print or send their arguments; a redirect or substitution in the segment can still read a file.
-    if (textOnly.has(cmd) && !protectedToken(words[0]) && !/[`<>]|\$\(/.test(segment)) continue;
+    // Text-only commands print or send their arguments; a pipe, redirect or substitution anywhere in the command can still read a file.
+    if (textOnly.has(cmd) && !protectedToken(words[0]) && !/[`<>|]|\$\(/.test(command)) continue;
     found.push(target);
   }
   return found[0] ?? null;

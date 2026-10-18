@@ -83,6 +83,9 @@ block 'bin/fm-send.sh task-1 "$(cat ~/.codex/auth.json)"'
 block 'bin/fm-send.sh task-1 < ~/.codex/auth.json'
 block 'echo hi > ~/.codex/auth.json'
 block 'echo hi; cat ~/.codex/auth.json'
+# A piped text-only command passes its path on to a reader, so the whole command must have no pipe.
+block "printf '%s\n' ~/.codex/auth.json | xargs cat"
+block 'echo ~/.codex/auth.json | sh'
 # A glob with no literal path segment is text, but "~/" plus a wildcard is still a glob reference.
 TILDE_GLOB=$(printf '\176/\052\052')
 block "cat $TILDE_GLOB"
