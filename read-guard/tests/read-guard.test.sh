@@ -4,7 +4,7 @@
 set -euo pipefail
 ADDON=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 T=$(mktemp -d); trap 'rm -rf -- "$T"' EXIT
-H=$T/home; mkdir -p "$H/.claude" "$H/.pi/agent" "$H/.config/opencode" "$H/.local/state/crewhouse/people/person1" "$H/.codex" "$H/.local/share/opencode" "$H/.pi/agent" "$H/.no-mistakes"
+H=$T/home; mkdir -p "$H/.claude" "$H/.pi/agent" "$H/.config/opencode" "$H/.local/state/crewhouse/people/person1" "$H/.local/share/byokit/people/1" "$H/.codex" "$H/.local/share/opencode" "$H/.pi/agent" "$H/.no-mistakes"
 echo '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"keep-me"}]}]}}' > "$H/.claude/settings.json"
 HOME=$H XDG_DATA_HOME=$H/.local/share "$ADDON/install.sh" >/dev/null
 G=$H/.local/share/fm-read-guard/guard.mjs
@@ -26,7 +26,24 @@ for cmd in \
   'grep ~/.local/state/crewhouse/people/person1/auth.json' \
   'cat ~/.codex/auth*' \
   'ls $(cat ~/.codex/auth.json)' \
-  'python -c "open(\"$HOME/.claude/.credentials.json\").read()"'; do block "$cmd"; done
+  'python -c "open(\"$HOME/.claude/.credentials.json\").read()"' \
+  'grep -r key ~/.codex' \
+  'tar czf x ~/.codex' \
+  'cp -r ~/.pi/agent /tmp' \
+  'rsync ~/.local/share/opencode/ x' \
+  'cd ~/.local/share/opencode && cat auth.json' \
+  'cat ~/.claude' \
+  'cp -r ~/.local/share/byokit/people/1 /tmp'; do block "$cmd"; done
+# 13:38Z BYOKit stored credential path.
+block 'cat ~/.local/share/byokit/people/1/auth.json'
+# 13:39Z Python one-liner embeds the absolute fixture path in a code token.
+block "python3 -c \\\"print(open('$H/.pi/agent/auth.json').read())\\\""
+# 13:39Z Node one-liner concatenates HOME with a protected-path suffix.
+block 'node -e "console.log(require(\\"fs\\").readFileSync(process.env.HOME+\\"/.pi/agent/auth.json\\",\\"utf8\\"))"'
+# 13:39Z heredoc body also contains a protected credential path.
+block "python3 - <<'EOF'
+printf(open('$H/.pi/agent/auth.json').read())
+EOF"
 block "cat $H/.codex/auth.json"
 block 'cat ~/.local/state/crewhouse/people/*/auth.json'
 allow 'ls -l ~/.codex/auth.json'
@@ -55,7 +72,7 @@ HOME=$H node "$T/pi.mjs" "$H/.pi/agent/extensions/fm-read-guard.ts" >/dev/null
 # Pi Read and Claude Read/Grep/Glob tool inputs are blocked too.
 node --input-type=module - "$G" "$H" <<'EOF'
 const { guardTool } = await import(process.argv[2]); const home = process.argv[3];
-for (const [tool, input] of [["read", {path:`${home}/.codex/auth.json`}], ["Read", {file_path:`${home}/.claude/.credentials.json`}], ["Grep", {path:`${home}/.pi/agent/auth.json`}], ["Glob", {pattern:`${home}/.local/share/opencode/auth*`}]])
+for (const [tool, input] of [["read", {path:`${home}/.codex/auth.json`}], ["Read", {file_path:`${home}/.claude/.credentials.json`}], ["Grep", {path:`${home}/.pi/agent/auth.json`}], ["Grep", {path:"~/.codex"}], ["Glob", {pattern:`${home}/.local/share/opencode/auth*`}]])
   if (!guardTool(tool, input)?.includes("fleet read guard")) throw Error(`${tool} was allowed`);
 EOF
 # Guarding is at the agent boundary: normal process/library reads of fixture credentials still work.

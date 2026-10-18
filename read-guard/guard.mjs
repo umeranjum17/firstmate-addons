@@ -3,13 +3,15 @@ import { homedir } from "node:os";
 
 const homes = [...new Set([process.env.HOME, homedir()].filter(Boolean).map((h) => h.replace(/\/+$/, "")))];
 const sensitive = [
-  /(?:^|\/)\.codex\/(?:auth[^/]*|\*[^/]*)$/,
-  /(?:^|\/)\.local\/share\/opencode\/(?:auth[^/]*|\*[^/]*)$/,
-  /(?:^|\/)\.pi\/agent\/(?:auth[^/]*|\*[^/]*)$/,
+  /(?:^|\/)\.codex(?:\/.*)?$/,
+  /(?:^|\/)\.local\/share\/opencode(?:\/.*)?$/,
+  /(?:^|\/)\.pi\/agent(?:\/.*)?$/,
   /(?:^|\/)\.claude\/(?:\.credentials[^/]*|\*[^/]*)$/,
-  /(?:^|\/)\.no-mistakes\/config\.ya?ml$/,
-  /(?:^|\/)\.local\/state\/crewhouse\/people\/[^/]+\/auth[^/]*$/,
-  /(?:^|\/)\.cache\/o6-tmp\/[^/]*\/people\/[^/]+\/auth[^/]*$/,
+  /(?:^|\/)\.claude$/,
+  /(?:^|\/)\.no-mistakes(?:\/.*)?$/,
+  /(?:^|\/)\.local\/state\/crewhouse\/people\/[^/]+(?:\/.*)?$/,
+  /(?:^|\/)\.local\/share\/byokit\/people\/[^/]+(?:\/.*)?$/,
+  /(?:^|\/)\.cache\/o6-tmp\/[^/]*\/people\/[^/]+(?:\/.*)?$/,
 ];
 const metadata = new Set(["ls", "stat", "test", "["]);
 
@@ -18,13 +20,18 @@ function tokens(command) {
     .map((s) => s.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, (_, d, q) => d ?? q));
 }
 
-function protectedToken(token) {
-  let value = token.replaceAll("${HOME}", "~").replaceAll("$HOME", "~");
-  for (const home of homes) if (value === home || value.startsWith(home + "/")) value = "~" + value.slice(home.length);
-  value = value.replace(/^~(?=\/|$)/, "~");
-  // Match a literal protected pathname against shell globs such as auth*, people/*/auth.json, and **.
-  return sensitive.some((rule) => rule.test(value));
+function protectedReference(text) {
+  // Embedded code/string literals can leave a pathname in the middle of a token (open(path).read(), HOME+"/path").
+  const fragments = text.match(/[~$\/\w.{}*?\[\]-]+/g) ?? [];
+  for (let value of fragments) {
+    value = value.replaceAll("${HOME}", "~").replaceAll("$HOME", "~");
+    for (const home of homes) if (value === home || value.startsWith(home + "/")) value = "~" + value.slice(home.length);
+    if (sensitive.some((rule) => rule.test(value))) return value;
+  }
+  return null;
 }
+
+function protectedToken(token) { return protectedReference(token) !== null; }
 
 function references(command) {
   const found = [];
@@ -32,10 +39,11 @@ function references(command) {
     const words = tokens(segment);
     if (!words.length) continue;
     const cmd = words[0].split("/").at(-1);
+    const target = protectedReference(segment);
+    if (target === null) continue;
     const refs = words.slice(1).filter(protectedToken);
-    if (!refs.length) continue;
-    if (metadata.has(cmd) && !/[`]|\$\(|<\(|>\(/.test(segment)) continue;
-    found.push(refs[0]);
+    if (metadata.has(cmd) && refs.length && !/[`]|\$\(|<\(|>\(/.test(segment)) continue;
+    found.push(target);
   }
   return found[0] ?? null;
 }
