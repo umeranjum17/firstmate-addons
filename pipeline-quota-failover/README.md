@@ -10,7 +10,7 @@ without a pi call and gets a quota marker.
 
 Fail-open cases (the route is tried as before, one log line says so):
 
-- `quota-axi` is missing, exits non-zero (for example `error: unsupported provider: claude-bridge`) or takes longer than 10s.
+- `quota-axi` is missing, exits non-zero (for example `error: unsupported provider: <name>` for a pi provider name it does not know) or takes longer than 10s. The wrapper maps the pi provider `openai-codex` to quota-axi's `codex`; other names pass unchanged.
 - `jq` is not installed; the pre-check is off for every route.
 
 An answer that is not parseable JSON is treated as not exhausted, without a log line.

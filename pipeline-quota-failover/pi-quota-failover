@@ -9,9 +9,9 @@
 # run fails, costing a restart.
 #
 # This wrapper runs the real pi; the requested chain model goes first, then
-# the other chain models in chain order (default GLM 5.3 Flash, then Claude
-# Haiku 5.5 through the claude-bridge provider - Claude Haiku 5.5 only as the
-# GLM failover; never Opus, Sonnet, Fable or Step 5), and when an attempt
+# the other chain models in chain order (default GLM 5.3 Flash, then GPT-6 Luna
+# through the openai-codex provider - GPT-6 Luna only as the GLM failover; never
+# Opus, Sonnet, Fable or Step 5), and when an attempt
 # answers a QUOTA error it moves at once to the next model in that order
 # inside the same invocation. Any non-quota failure passes through
 # byte-for-byte with its original exit code, so the pipeline's own handling is
@@ -51,7 +51,7 @@ set -u
 # surface only.
 QUOTA_RE='limit used up|usage limit|limit has been reached|GoUsageLimitError|rate limit exceeded|quota|available credits|insufficient credits|Claude rate limit|out of extra usage'
 
-chain=${PI_QUOTA_FAILOVER_CHAIN:-'zai/glm-5.3-flash claude-bridge/claude-haiku-5-5'}
+chain=${PI_QUOTA_FAILOVER_CHAIN:-'zai/glm-5.3-flash openai-codex/gpt-6-luna'}
 # The chain is the fleet's one route list: route-change reads it from here.
 [ -z "${PI_QUOTA_FAILOVER_PRINT_CHAIN:-}" ] || { printf '%s\n' "$chain"; exit 0; }
 
@@ -99,16 +99,25 @@ mark_dead() {
   mkdir -p "$dead_dir" 2>/dev/null
   printf '%s %s\n' "$1" "$(date +%s)" >"$(marker "$1")" 2>/dev/null
 }
+# quota_provider <pi-provider>: the quota-axi name of a pi provider. quota-axi calls the openai-codex provider "codex"
+# and has no claude-bridge provider; any other name is the same in both.
+quota_provider() {
+  case $1 in
+    openai-codex) echo codex ;;
+    *) echo "$1" ;;
+  esac
+}
 # quota_exhausted <model>: quota-axi reports exhausted_now for this model's provider with scope all_models or model:<id>.
 # Missing, slow (10s cap), failing or unparseable quota-axi answers no, so the route is tried as before.
 quota_exhausted() {
-  local answer
+  local answer qp
+  qp=$(quota_provider "${1%%/*}")
   command -v jq >/dev/null 2>&1 || { log_line "jq missing: quota pre-check off, model=$1 tried as before"; return 1; }
-  answer=$(timeout 10 quota-axi --provider "${1%%/*}" --json --max-age 5m --no-credential-refresh 2>/dev/null) || {
-    log_line "quota-axi gave no answer for ${1%%/*} (exit $?); model=$1 not pre-checked"
+  answer=$(timeout 10 quota-axi --provider "$qp" --json --max-age 5m --no-credential-refresh 2>/dev/null) || {
+    log_line "quota-axi gave no answer for $qp (exit $?); model=$1 not pre-checked"
     return 1
   }
-  jq -e --arg p "${1%%/*}" --arg s "model:${1#*/}" '[.providers[]? | select(.provider == $p) | .quotaSemantics.effectiveAvailability[]? | select((.scope == "all_models" or .scope == $s) and .runway.status == "exhausted_now")] | length > 0' <<<"$answer" >/dev/null 2>&1
+  jq -e --arg p "$qp" --arg s "model:${1#*/}" '[.providers[]? | select(.provider == $p) | .quotaSemantics.effectiveAvailability[]? | select((.scope == "all_models" or .scope == $s) and .runway.status == "exhausted_now")] | length > 0' <<<"$answer" >/dev/null 2>&1
 }
 idle_secs=${PI_QUOTA_FAILOVER_IDLE_SECS:-120}
 
@@ -228,7 +237,7 @@ done
 # Only intercept calls whose model is in the chain: an operator-pinned profile
 # (axi run --model) for any other model passes through untouched, which also
 # keeps the pi-only pinned-profile rule intact. The requested model goes first,
-# then every other chain model in chain order, so a profile set to Haiku fails
+# then every other chain model in chain order, so a profile set to GPT-6 Luna fails
 # over to GLM.
 order=()
 for m in "${models[@]}"; do
@@ -287,6 +296,7 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
     # Only a real answer clears the route's marker; a kill, a timeout or any other failure keeps it.
     if [ "$rc" = 0 ] && [ -z "$(error_text 0)" ]; then
       rm -f "$(marker "$model")"
+      log_line "model=$model answered in $((t1 - t0))ms ($(stat -c %s "$out_file") bytes)"
     fi
     # Not a quota failure: hand the pipeline exactly what real pi produced.
     cat "$out_file"
