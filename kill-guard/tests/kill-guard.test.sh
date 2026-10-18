@@ -9,7 +9,7 @@ trap cleanup EXIT
 mkdir -p "$T/home/.claude" "$T/home/.pi/agent" "$T/home/.config/opencode" "$T/bin"
 echo '{"env":{"KEEP":"1"},"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"other-hook"}]}]}}' > "$T/home/.claude/settings.json"
 fail=0; ok() { echo "ok: $*"; }; no() { echo "FAIL: $*"; fail=1; }
-inst() { env -u XDG_DATA_HOME HOME="$T/home" "$ADDON/install.sh" "$@"; }
+inst() { env -u XDG_DATA_HOME HOME="$T/home" "$ADDON/install.sh"; }
 
 inst >/dev/null && inst > "$T/re.out" && [ "$(grep -c '^unchanged: ' "$T/re.out")" -eq 4 ] && ok "reinstall changes nothing" || no "reinstall not idempotent"
 jq -e '([.hooks.PreToolUse[].hooks[].command] | index("other-hook") == 0) and .env.KEEP == "1"' "$T/home/.claude/settings.json" >/dev/null && ok "claude settings merged" || no "claude settings merge"
