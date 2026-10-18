@@ -1,10 +1,10 @@
 // Fleet kill guard, the rule every adapter calls. A kill, pkill or killall may signal only the caller's own descendants,
 // never PID 1, the systemd user manager or the herdr server, and never a target it cannot resolve. A block is final.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SELF = fileURLToPath(import.meta.url);
+const SELF = realpathSync(fileURLToPath(import.meta.url));
 const MODELLED = { kill: "lL", pkill: "f", killall: "" }; // options the guard reads; any other option refuses
 const WRAPPERS = /^(sudo|env|nohup|exec|command|builtin|time|nice|ionice|taskset|stdbuf|timeout|setsid|doas|runuser|chrt|flock|unbuffer|xargs|then|do|else|if|elif|case|while|until|\{|[\w.-]+\(\))$/;
 const SIGNAL = /^-(\d+|[A-Z][A-Z0-9]*)$/; // -9, -KILL, -SIGTERM
@@ -173,7 +173,7 @@ export function guard(command, { caller = process.pid } = {}) {
 }
 
 // Hook CLI for Claude Code: PreToolUse JSON on stdin; exit 2 with the reason on stderr blocks. --caller is the agent's pid.
-if (process.argv[1] === SELF) {
+if (process.argv[1] && realpathSync(process.argv[1]) === SELF) {
 	let p = {};
 	try { p = JSON.parse(readFileSync(0, "utf8")); } catch {}
 	const i = process.argv.indexOf("--caller");

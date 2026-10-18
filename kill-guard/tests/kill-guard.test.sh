@@ -60,5 +60,7 @@ allow "$$" $'git commit -m "$(cat <<\'EOF\'\nkill stale lanes\nEOF\n)"'
 
 hook "$$" 'kill 1'; sh -c "$HOOK" < "$T/in.json" 2>"$T/err" && rc=0 || rc=$?
 [ "$rc" -eq 2 ] && [[ "$(cat "$T/err")" == *"PID 1 (init)"* ]] && ok "installed hook blocks kill 1" || no "installed hook did not block kill 1"
+ln -s "$T/home/.local/share" "$T/link"; jq -n '{tool_input:{command:"kill -9 1"}}' | node "$T/link/fm-kill-guard/guard.mjs" --caller "$$" 2> "$T/err" && rc=0 || rc=$?
+[ "$rc" -eq 2 ] && [[ "$(cat "$T/err")" == *"PID 1 (init)"* ]] && ok "symlinked install blocks kill -9 1" || no "symlinked install allowed kill -9 1"
 
 [ "$fail" -eq 0 ] && echo "kill-guard e2e: all passed" || { echo "kill-guard e2e: FAILED"; exit 1; }
