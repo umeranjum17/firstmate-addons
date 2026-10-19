@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Wrapper test: a stub Firstmate checkout stands in for the real board. Covers
 # build and path passthrough, argument forwarding, the recursion guard, and install
-# and uninstall round trips including their failure paths and hook cleanup.
+# and uninstall round trips including their failure paths, hook cleanup, and the
+# hook's file, mode and links surviving that round trip.
 set -eu
 
 ADDON=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -45,6 +46,34 @@ grep -q "$LAUNCHER" "$FMH/config/bearings-board-command" || fail "hook not point
 "$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall failed"
 [ ! -e "$LAUNCHER" ] || fail "launcher left behind"
 [ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "hook not restored"
+[ -z "$(ls "$FMH/config/"*.bak-bearings-board-thin-* 2>/dev/null)" ] || fail "backup left behind after restore"
+
+# A home hook is often a symlink into shared config: the round trip must write through
+# the link and leave the link and the shared file's mode as they were.
+printf 'old\n' > "$FMH/config/shared-board-command"
+chmod 600 "$FMH/config/shared-board-command"
+rm -f -- "$FMH/config/bearings-board-command"
+ln -s shared-board-command "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install over a symlinked hook failed"
+[ -L "$FMH/config/bearings-board-command" ] || fail "install replaced the hook symlink"
+[ "$(cat "$FMH/config/shared-board-command")" = "$LAUNCHER" ] || fail "install did not write through the hook symlink"
+[ "$(stat -c %a "$FMH/config/shared-board-command")" = 600 ] || fail "install changed the shared hook mode"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall of a symlinked hook failed"
+[ -L "$FMH/config/bearings-board-command" ] || fail "uninstall replaced the hook symlink"
+[ "$(cat "$FMH/config/shared-board-command")" = old ] || fail "uninstall did not restore the shared hook content"
+[ "$(stat -c %a "$FMH/config/shared-board-command")" = 600 ] || fail "uninstall changed the shared hook mode"
+[ ! -e "$LAUNCHER" ] || fail "launcher left behind after a symlinked hook"
+rm -f -- "$FMH/config/shared-board-command" "$FMH/config/bearings-board-command"
+
+# A plain hook keeps its mode across the same round trip.
+printf 'old\n' > "$FMH/config/bearings-board-command"
+chmod 600 "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install over a mode-0600 hook failed"
+[ "$(stat -c %a "$FMH/config/bearings-board-command")" = 600 ] || fail "install changed the hook mode"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall of a mode-0600 hook failed"
+[ "$(stat -c %a "$FMH/config/bearings-board-command")" = 600 ] || fail "uninstall changed the hook mode"
+[ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "mode-0600 hook content not restored"
+chmod 644 "$FMH/config/bearings-board-command"
 
 "$ADDON/install.sh" "$FMH" >/dev/null || fail "second install failed"
 printf 'exec %s "$@"\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
@@ -53,21 +82,24 @@ grep -q "$LAUNCHER" "$FMH/config/bearings-board-command" || fail "edited hook wa
 [ -x "$LAUNCHER" ] || fail "launcher removed from under a surviving hook"
 
 # Hand-wire the hook as install's message suggests, rerun install, then uninstall:
-# the hook must not survive naming a launcher that uninstall removed.
+# the hook is the operator's, so it survives, and the launcher it names is kept.
 rm -f -- "$FMH/config/bearings-board-command" "$LAUNCHER" "$FMH/config/"*.bak-bearings-board-thin-*
 "$ADDON/install.sh" "$FMH" >/dev/null || fail "install without a hook failed"
 [ ! -e "$FMH/config/bearings-board-command" ] || fail "install created a hook"
 printf '%s\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
 "$ADDON/install.sh" "$FMH" >/dev/null || fail "install rerun over a hand-wired hook failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = "$LAUNCHER" ] || fail "install rewrote a hand-wired hook"
 "$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall after the rerun failed"
-[ ! -e "$LAUNCHER" ] || fail "launcher left behind after the rerun"
-[ "$(cat "$FMH/config/bearings-board-command" 2>/dev/null)" != "$LAUNCHER" ] || fail "hook still names the removed launcher"
+[ "$(cat "$FMH/config/bearings-board-command" 2>/dev/null)" = "$LAUNCHER" ] || fail "uninstall removed a hook install never wrote"
+[ -x "$LAUNCHER" ] || fail "launcher removed from under a hand-wired hook"
+rm -f -- "$FMH/config/bearings-board-command" "$LAUNCHER"
 
-# A backup cleaned up before uninstall must not abort it or leave a dangling hook.
+# A backup cleaned up before uninstall must not abort it: install wrote that hook, so it
+# goes, and the launcher with it.
 printf 'old\n' > "$FMH/config/bearings-board-command"
 "$ADDON/install.sh" "$FMH" >/dev/null || fail "install before backup removal failed"
 rm -f -- "$FMH/config/"*.bak-bearings-board-thin-*
 "$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall without its backup failed"
 [ ! -e "$LAUNCHER" ] || fail "launcher left behind without a backup"
-[ "$(cat "$FMH/config/bearings-board-command" 2>/dev/null)" != "$LAUNCHER" ] || fail "hook still names the removed launcher without a backup"
+[ ! -e "$FMH/config/bearings-board-command" ] || fail "hook install wrote left behind without a backup"
 echo "ok: wrapper build, forwarding, recursion guard, and install round trips"

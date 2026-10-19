@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Remove what install.sh added to one Firstmate home, and nothing else: the home hook
-# (restored from its backup when install changed it), the install record, and the
-# launcher once nothing can still name it. A hook edited since install is left alone,
-# the launcher is kept whenever the home's board command may still name it, and a hook
-# is removed rather than restored when the backup is gone or itself names the launcher.
+# Remove what install.sh added to one Firstmate home, and nothing else: the install
+# record and the launcher once nothing can still name it. The home hook gets its saved
+# content back in place, keeping its file, mode and links; a hook that was gone when
+# install ran, or that install never wrote and has since been edited, is left alone,
+# and the launcher is kept whenever the home's board command may still name it.
 # Usage: uninstall.sh [--dry-run] <fm-home>
 set -euo pipefail
 DRY=0
@@ -18,18 +18,20 @@ HOOK=$(field hook)
 BACKUP=$(field backup)
 
 kept=0
-if [ "$HOOK" != - ] && [ -f "$HOOK" ] && [ "$(cat "$HOOK")" = "$LAUNCHER" ]; then
-  if [ "$BACKUP" != - ] && [ -f "$BACKUP" ] && ! grep -qF -- "$LAUNCHER" "$BACKUP"; then
-    [ "$DRY" -eq 1 ] || mv "$BACKUP" "$HOOK"
+if [ "$HOOK" != - ] && [ -f "$HOOK" ] && [ "$(cat "$HOOK")" = "$LAUNCHER" ] && [ "$BACKUP" != - ]; then
+  if [ -f "$BACKUP" ]; then
+    [ "$DRY" -eq 1 ] || { cat "$BACKUP" > "$HOOK" && rm -f -- "$BACKUP"; }
     echo "restored $HOOK from $BACKUP"
   else
     [ "$DRY" -eq 1 ] || rm -f -- "$HOOK"
-    echo "removed $HOOK"
+    echo "removed $HOOK: install had replaced it and that backup is gone"
   fi
 else
   kept=1
   if [ "$HOOK" = - ]; then
     echo "no home hook was installed"
+  elif [ "$BACKUP" = - ]; then
+    echo "left $HOOK alone: install did not write it"
   else
     echo "left $HOOK alone: it does not name $LAUNCHER"
   fi

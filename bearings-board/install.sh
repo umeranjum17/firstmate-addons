@@ -2,8 +2,11 @@
 # Wire the Bearings board wrapper into one Firstmate home: a launcher that runs the
 # checkout's board. A home hook at config/bearings-board-command
 # is pointed at the launcher only when it exists; otherwise install prints the command.
-# A hook that already names the launcher is left as it is and recorded without a backup,
-# so uninstall never restores a hook that names a launcher it removes.
+# The hook keeps the file, mode and links it had: install saves its content beside it and
+# rewrites that content in place through whatever the hook is. A hook that already names
+# the launcher is left as it is and keeps the backup recorded by the install that wrote
+# it, so uninstall restores the operator's content. The record's backup field is the
+# ownership mark: install wrote the hook exactly when it is set.
 # The launcher and the install record are written before the hook is repointed, so a
 # failed install leaves the home's board command working and removable.
 # Idempotent: rerun it to update. Usage: install.sh [--dry-run] <fm-home>
@@ -18,19 +21,29 @@ HOOK="$FMH/config/bearings-board-command"
 RECORD="$FMH/state/bearings-board-thin.install"
 STAMP=$(date +%s)
 
-[ "$DRY" -eq 1 ] || { [ ! -f "$RECORD" ] || "$SRC/uninstall.sh" "$FMH"; }
-
-hook_state=- hook_backup=-
+hook_state=- hook_backup=- hook_write=0
+prev_hook=- prev_backup=-
+if [ -f "$RECORD" ]; then
+  prev_hook=$(sed -n 's/^hook=//p' "$RECORD")
+  prev_backup=$(sed -n 's/^backup=//p' "$RECORD")
+fi
 if [ -e "$HOOK" ]; then
   hook_state=$HOOK
-  grep -qF -- "$LAUNCHER" "$HOOK" || hook_backup="$HOOK.bak-bearings-board-thin-$STAMP"
+  if [ "$(cat "$HOOK")" = "$LAUNCHER" ]; then
+    if [ "$prev_hook" = "$HOOK" ] && [ "$prev_backup" != - ]; then
+      hook_backup=$prev_backup
+    fi
+  else
+    hook_backup="$HOOK.bak-bearings-board-thin-$STAMP"
+    hook_write=1
+  fi
 fi
 
 if [ "$DRY" -eq 1 ]; then
   echo "dry run: nothing written; would write $LAUNCHER and $RECORD"
   if [ "$hook_state" = - ]; then
     echo "no home hook at $HOOK: set this home's board command to $LAUNCHER"
-  elif [ "$hook_backup" = - ]; then
+  elif [ "$hook_write" -eq 0 ]; then
     echo "would leave $HOOK alone: it already names $LAUNCHER"
   else
     echo "would back up $HOOK to $hook_backup, then point it at $LAUNCHER"
@@ -48,10 +61,10 @@ if [ "$hook_state" = - ]; then
   echo "no home hook at $HOOK: set this home's board command to $LAUNCHER"
   exit 0
 fi
-if [ "$hook_backup" = - ]; then
+if [ "$hook_write" -eq 0 ]; then
   echo "left $HOOK alone: it already names $LAUNCHER"
   exit 0
 fi
 cp -p "$HOOK" "$hook_backup"
-printf '%s\n' "$LAUNCHER" > "$HOOK.tmp-$STAMP" && mv "$HOOK.tmp-$STAMP" "$HOOK"
+printf '%s\n' "$LAUNCHER" > "$HOOK"
 echo "pointed $HOOK at $LAUNCHER (backup $hook_backup)"
