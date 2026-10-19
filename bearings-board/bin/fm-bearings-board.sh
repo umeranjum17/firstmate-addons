@@ -2,8 +2,8 @@
 # fm-bearings-board.sh - runs the Bearings board from the Firstmate checkout, unchanged.
 #
 # Commands:
-#   build <data.json> [args...]   check the payload is JSON, then run the checkout's build
-#   path                          print the board path the checkout reports
+#   build <data.json> [args...]   run the checkout's build with every argument
+#   path [args...]                run the checkout's path with every argument
 #
 # FM_CODE_ROOT names the Firstmate checkout (defaults to FM_HOME). Nothing is copied
 # from the checkout: its own bin/fm-bearings-board.sh does the work and receives every
@@ -28,11 +28,8 @@ checkout_board() {
 }
 
 build() {
-  local data=${1:-} upstream
-  [ -n "$data" ] || usage
-  [ -f "$data" ] || fail "no payload at $data"
-  command -v jq >/dev/null 2>&1 || fail "jq is required to check the payload"
-  jq empty "$data" >/dev/null 2>&1 || fail "board data is not valid JSON: $data"
+  local upstream
+  [ "$#" -ge 1 ] || usage
   upstream=$(checkout_board)
   exec env FM_BEARINGS_BOARD_WRAPPER=1 "$upstream" build "$@"
 }

@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Wrapper test: a stub Firstmate checkout stands in for the real board. Covers
-# build, payload refusal, argument forwarding, the recursion guard, and install and
-# uninstall round trips including their failure paths and hook cleanup.
+# build and path passthrough, argument forwarding, the recursion guard, and install
+# and uninstall round trips including their failure paths and hook cleanup.
 set -eu
 
 ADDON=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 WRAPPER="$ADDON/bin/fm-bearings-board.sh"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/bearings-board-test.XXXXXX")
 trap 'rm -rf -- "$TMP"' EXIT
-command -v jq >/dev/null 2>&1 || { echo "skip: jq not found"; exit 0; }
 
 fail() { printf 'not ok: %s\n' "$*" >&2; exit 1; }
 FMH="$TMP/fm"
@@ -25,9 +24,7 @@ chmod +x "$FMH/bin/fm-bearings-board.sh"
 printf 'old\n' > "$FMH/config/bearings-board-command"
 export FM_CODE_ROOT="$FMH" FM_HOME="$FMH"
 
-printf 'not json\n' > "$TMP/bad.json"; echo '{"projects":[]}' > "$TMP/good.json"
-"$WRAPPER" build "$TMP/bad.json" 2>/dev/null && fail "bad JSON was accepted"
-[ ! -e "$FMH/state/board.html" ] || fail "bad JSON still ran the checkout build"
+echo '{"projects":[]}' > "$TMP/good.json"
 "$WRAPPER" build "$TMP/good.json" || fail "good payload refused"
 grep -q built "$FMH/state/board.html" || fail "checkout build did not run"
 [ -z "$(sed -n 3p "$FMH/state/build-args")" ] || fail "unexpected extra argument forwarded"

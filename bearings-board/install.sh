@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Wire the Bearings board wrapper into one Firstmate home: a launcher that runs the
-# checkout's board with this add-on's extras. A home hook at config/bearings-board-command
+# checkout's board. A home hook at config/bearings-board-command
 # is pointed at the launcher only when it exists; otherwise install prints the command.
 # A hook that already names the launcher is left as it is and recorded without a backup,
 # so uninstall never restores a hook that names a launcher it removes.
