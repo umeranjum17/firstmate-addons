@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# fm-bearings-board.sh - runs the Bearings board from the Firstmate checkout, unchanged.
+#
+# Commands:
+#   build <data.json>   check the payload is JSON, then run the checkout's build
+#   path                print the board path the checkout reports
+#
+# FM_CODE_ROOT names the Firstmate checkout (defaults to FM_HOME). Nothing is copied
+# from the checkout: its own bin/fm-bearings-board.sh does the work.
+# bin/install.sh wires this wrapper into a home; bin/uninstall.sh removes it.
+set -eu
+
+fail() { printf 'fm-bearings-board: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  printf 'usage: fm-bearings-board.sh build <data.json> | path\n' >&2
+  exit 2
+}
+
+checkout_board() {
+  local root="${FM_CODE_ROOT:-${FM_HOME:-}}"
+  [ -n "$root" ] || fail "set FM_CODE_ROOT to the Firstmate checkout"
+  [ -x "$root/bin/fm-bearings-board.sh" ] || fail "no bin/fm-bearings-board.sh under $root"
+  printf '%s/bin/fm-bearings-board.sh\n' "$root"
+}
+
+build() {
+  local data=${1:-} upstream
+  [ -n "$data" ] || usage
+  [ -f "$data" ] || fail "no payload at $data"
+  command -v jq >/dev/null 2>&1 || fail "jq is required to check the payload"
+  jq empty "$data" >/dev/null 2>&1 || fail "board data is not valid JSON: $data"
+  upstream=$(checkout_board)
+  exec "$upstream" build "$data"
+}
+
+case "${1-}" in
+  build) shift; build "$@" ;;
+  path) exec "$(checkout_board)" path ;;
+  *) usage ;;
+esac
