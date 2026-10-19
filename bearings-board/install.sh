@@ -2,6 +2,8 @@
 # Wire the Bearings board wrapper into one Firstmate home: a launcher that runs the
 # checkout's board with this add-on's extras. A home hook at config/bearings-board-command
 # is pointed at the launcher only when it exists; otherwise install prints the command.
+# A hook that already names the launcher is left as it is and recorded without a backup,
+# so uninstall never restores a hook that names a launcher it removes.
 # The launcher and the install record are written before the hook is repointed, so a
 # failed install leaves the home's board command working and removable.
 # Idempotent: rerun it to update. Usage: install.sh [--dry-run] <fm-home>
@@ -19,13 +21,17 @@ STAMP=$(date +%s)
 [ "$DRY" -eq 1 ] || { [ ! -f "$RECORD" ] || "$SRC/uninstall.sh" "$FMH"; }
 
 hook_state=- hook_backup=-
-[ -e "$HOOK" ] && hook_state=$HOOK
-[ "$hook_state" = - ] || hook_backup="$HOOK.bak-bearings-board-thin-$STAMP"
+if [ -e "$HOOK" ]; then
+  hook_state=$HOOK
+  grep -qF -- "$LAUNCHER" "$HOOK" || hook_backup="$HOOK.bak-bearings-board-thin-$STAMP"
+fi
 
 if [ "$DRY" -eq 1 ]; then
   echo "dry run: nothing written; would write $LAUNCHER and $RECORD"
   if [ "$hook_state" = - ]; then
     echo "no home hook at $HOOK: set this home's board command to $LAUNCHER"
+  elif [ "$hook_backup" = - ]; then
+    echo "would leave $HOOK alone: it already names $LAUNCHER"
   else
     echo "would back up $HOOK to $hook_backup, then point it at $LAUNCHER"
   fi
@@ -40,6 +46,10 @@ echo "installed: $LAUNCHER"
 
 if [ "$hook_state" = - ]; then
   echo "no home hook at $HOOK: set this home's board command to $LAUNCHER"
+  exit 0
+fi
+if [ "$hook_backup" = - ]; then
+  echo "left $HOOK alone: it already names $LAUNCHER"
   exit 0
 fi
 cp -p "$HOOK" "$hook_backup"

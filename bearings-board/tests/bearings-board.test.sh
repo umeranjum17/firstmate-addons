@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper test: a stub Firstmate checkout stands in for the real board. Covers
 # build, payload refusal, argument forwarding, the recursion guard, and install and
-# uninstall round trips including their failure paths.
+# uninstall round trips including their failure paths and hook cleanup.
 set -eu
 
 ADDON=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -54,4 +54,23 @@ printf 'exec %s "$@"\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
 "$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall of an edited hook failed"
 grep -q "$LAUNCHER" "$FMH/config/bearings-board-command" || fail "edited hook was overwritten"
 [ -x "$LAUNCHER" ] || fail "launcher removed from under a surviving hook"
+
+# Hand-wire the hook as install's message suggests, rerun install, then uninstall:
+# the hook must not survive naming a launcher that uninstall removed.
+rm -f -- "$FMH/config/bearings-board-command" "$LAUNCHER" "$FMH/config/"*.bak-bearings-board-thin-*
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install without a hook failed"
+[ ! -e "$FMH/config/bearings-board-command" ] || fail "install created a hook"
+printf '%s\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install rerun over a hand-wired hook failed"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall after the rerun failed"
+[ ! -e "$LAUNCHER" ] || fail "launcher left behind after the rerun"
+[ "$(cat "$FMH/config/bearings-board-command" 2>/dev/null)" != "$LAUNCHER" ] || fail "hook still names the removed launcher"
+
+# A backup cleaned up before uninstall must not abort it or leave a dangling hook.
+printf 'old\n' > "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install before backup removal failed"
+rm -f -- "$FMH/config/"*.bak-bearings-board-thin-*
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall without its backup failed"
+[ ! -e "$LAUNCHER" ] || fail "launcher left behind without a backup"
+[ "$(cat "$FMH/config/bearings-board-command" 2>/dev/null)" != "$LAUNCHER" ] || fail "hook still names the removed launcher without a backup"
 echo "ok: wrapper build, forwarding, recursion guard, and install round trips"

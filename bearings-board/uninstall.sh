@@ -2,7 +2,8 @@
 # Remove what install.sh added to one Firstmate home, and nothing else: the home hook
 # (restored from its backup when install changed it), the install record, and the
 # launcher once nothing can still name it. A hook edited since install is left alone,
-# and the launcher is kept whenever the home's board command may still name it.
+# the launcher is kept whenever the home's board command may still name it, and a hook
+# is removed rather than restored when the backup is gone or itself names the launcher.
 # Usage: uninstall.sh [--dry-run] <fm-home>
 set -euo pipefail
 DRY=0
@@ -18,7 +19,7 @@ BACKUP=$(field backup)
 
 kept=0
 if [ "$HOOK" != - ] && [ -f "$HOOK" ] && [ "$(cat "$HOOK")" = "$LAUNCHER" ]; then
-  if [ "$BACKUP" != - ]; then
+  if [ "$BACKUP" != - ] && [ -f "$BACKUP" ] && ! grep -qF -- "$LAUNCHER" "$BACKUP"; then
     [ "$DRY" -eq 1 ] || mv "$BACKUP" "$HOOK"
     echo "restored $HOOK from $BACKUP"
   else
@@ -30,7 +31,7 @@ else
   if [ "$HOOK" = - ]; then
     echo "no home hook was installed"
   else
-    echo "left $HOOK alone: it no longer names $LAUNCHER"
+    echo "left $HOOK alone: it does not name $LAUNCHER"
   fi
   echo "kept $LAUNCHER: the home's board command may still name it; repoint that command, then delete the launcher"
 fi
