@@ -17,7 +17,7 @@ cat > "$w/fake-spawn.sh" <<'FAKE'
 CONFIG=$TEST_CONFIG HARNESS=claude WORKER_ACCOUNT= LAUNCH=claude SPAWN_ACCOUNT=
 SCRIPT_DIR=$TEST_BIN
 shell_quote() { printf '%q' "$1"; }
-_fm_ap=${FM_ADDONS_DIR:-$SCRIPT_DIR/../projects/firstmate-addons}/account-pool/bin/fm-account-pool-lib.sh; { [ -r "$_fm_ap" ] && . "$_fm_ap"; } || fm_account_hook() { :; }
+_fm_ap=${FM_ADDONS_DIR:-${FM_HOME:-$SCRIPT_DIR/..}/projects/firstmate-addons}/account-pool/bin/fm-account-pool-lib.sh; { [ -r "$_fm_ap" ] && . "$_fm_ap"; } || fm_account_hook() { :; }
 [ -z "${TEST_RAW:-}" ] || fm_account_hook raw-launch "$CONFIG" || exit 1
 fm_account_hook spawn-pick "$HARNESS" "$CONFIG" "$WORKER_ACCOUNT" || exit 1
 [ -z "${CLAUDE_CONFIG_DIR:-}" ] || LAUNCH="CLAUDE_CONFIG_DIR=$(shell_quote "$CLAUDE_CONFIG_DIR") $LAUNCH"
