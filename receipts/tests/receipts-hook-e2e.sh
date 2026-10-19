@@ -14,7 +14,7 @@ cleanup() {
 trap cleanup EXIT
 export HOME=$d/user TMPDIR=$d/tmp
 mkdir -p "$HOME" "$TMPDIR" "$d/fork"
-cp -a "$FM_TEST_FORK/bin" "$FM_TEST_FORK/tests" "$d/fork/"
+cp -a "$FM_TEST_FORK/bin" "$FM_TEST_FORK/tests" "$FM_TEST_FORK/.agents" "$d/fork/"
 # Step-B simulation on the private copy only: the acceptance definition becomes
 # the optional source, and the publisher is the add-on's executable.
 python3 - "$d/fork/bin/fm-dod-lib.sh" <<'PY'
@@ -27,7 +27,8 @@ end = next(i for i in range(start + 1, len(lines)) if lines[i] == '}')
 lines[start:end + 1] = ['[ ! -r "${FM_ADDONS_DIR:-$FM_HOME/projects/firstmate-addons}/receipts/bin/fm-receipts-lib.sh" ] || . "${FM_ADDONS_DIR:-$FM_HOME/projects/firstmate-addons}/receipts/bin/fm-receipts-lib.sh"']
 p.write_text('\n'.join(lines) + '\n')
 PY
-printf '#!/usr/bin/env bash\nexec "$FM_ADDONS_DIR/receipts/bin/fm-run-receipt.sh" "$@"\n' > "$d/fork/bin/fm-run-receipt.sh"
+# shellcheck disable=SC2016 # the shim body expands when the shim runs
+printf '#!/usr/bin/env bash\nFM_FORK_BIN="$(dirname "$0")" exec "$FM_ADDONS_DIR/receipts/bin/fm-run-receipt.sh" "$@"\n' > "$d/fork/bin/fm-run-receipt.sh"
 chmod +x "$d/fork/bin/fm-run-receipt.sh"
 bash -n "$d/fork/bin/fm-dod-lib.sh"
 
