@@ -33,7 +33,7 @@ else
   elif [ "$BACKUP" = - ]; then
     echo "left $HOOK alone: install did not write it"
   else
-    echo "left $HOOK alone: it does not name $LAUNCHER"
+    echo "left $HOOK alone: it changed since install"
   fi
   echo "kept $LAUNCHER: the home's board command may still name it; repoint that command, then delete the launcher"
 fi

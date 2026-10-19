@@ -33,7 +33,7 @@ if [ -e "$HOOK" ]; then
     if [ "$prev_hook" = "$HOOK" ] && [ "$prev_backup" != - ]; then
       hook_backup=$prev_backup
     fi
-  else
+  elif ! grep -qF -- "$LAUNCHER" "$HOOK"; then
     hook_backup="$HOOK.bak-bearings-board-thin-$STAMP"
     hook_write=1
   fi

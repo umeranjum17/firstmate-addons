@@ -102,4 +102,16 @@ rm -f -- "$FMH/config/"*.bak-bearings-board-thin-*
 "$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall without its backup failed"
 [ ! -e "$LAUNCHER" ] || fail "launcher left behind without a backup"
 [ ! -e "$FMH/config/bearings-board-command" ] || fail "hook install wrote left behind without a backup"
+
+# A hook that already names the launcher in exec form is left as it is: install writes no
+# backup for it, and uninstall keeps both the hook and the launcher it names.
+printf 'old\n' > "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install before an exec-form hook failed"
+printf 'exec %s "$@"\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install over an exec-form hook failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = "exec $LAUNCHER \"\$@\"" ] || fail "install rewrote an exec-form hook"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall of an exec-form hook failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = "exec $LAUNCHER \"\$@\"" ] || fail "uninstall changed an exec-form hook"
+[ -x "$LAUNCHER" ] || fail "launcher removed from under a hook that names it"
+rm -f -- "$FMH/config/bearings-board-command" "$LAUNCHER" "$FMH/config/"*.bak-bearings-board-thin-*
 echo "ok: wrapper build, forwarding, recursion guard, and install round trips"
