@@ -10,7 +10,7 @@
 #
 # This wrapper runs the real pi; the requested chain model goes first, then
 # the other chain models in chain order (default Claude
-# Haiku 5.5 through claude-bridge, the free MiniMax route on OpenRouter, then DeepSeek Flash; never
+# Haiku 5.5 through claude-bridge, the free MiniMax route on OpenRouter; never
 # Opus, Sonnet, Fable, Codex, Go, Muse or Step 5). A call pinned to a model
 # outside the chain runs the chain in chain order, so no pipeline role reaches
 # a model the chain does not name. When an attempt answers a QUOTA error it
@@ -66,7 +66,7 @@ QUOTA_RE='limit used up|usage limit|limit has been reached|rate limit reached|Go
 # extension warning/failure is a route failure: the chain moves on without a quota marker (fleet retro 19 Oct, fix 2).
 ROUTE_FAIL_RE='WaitDelay|parse events|extension.*(warning|failed|error)|(warning|error|failed).*extension'
 
-chain=${PI_QUOTA_FAILOVER_CHAIN:-'claude-bridge/claude-haiku-5-5 openrouter/minimax/minimax-m3.1-flash:free deepseek/deepseek-flash'}
+chain=${PI_QUOTA_FAILOVER_CHAIN:-'claude-bridge/claude-haiku-5-5 openrouter/minimax/minimax-m3.1-flash:free'}
 # The chain is the fleet's one route list: route-change reads it from here.
 [ -z "${PI_QUOTA_FAILOVER_PRINT_CHAIN:-}" ] || { printf '%s\n' "$chain"; exit 0; }
 

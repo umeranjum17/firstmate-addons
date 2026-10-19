@@ -180,8 +180,8 @@ child_gone() {
   return 1
 }
 
-is "default chain is Claude Haiku, the free MiniMax route, then DeepSeek Flash (GLM removed)" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" \
-  "claude-bridge/claude-haiku-5-5 openrouter/minimax/minimax-m3.1-flash:free deepseek/deepseek-flash"
+is "default chain is Claude Haiku, then the free MiniMax route (DeepSeek and GLM removed)" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" \
+  "claude-bridge/claude-haiku-5-5 openrouter/minimax/minimax-m3.1-flash:free"
 
 # 0. The default chain, no override. A Codex-pinned call (the first-draft fix step's route) runs the chain and lands on
 #    DeepSeek: quota-axi is asked for DeepSeek and does not skip it, and Codex, GLM and Haiku are not called.
@@ -193,7 +193,7 @@ is "codex-pinned call exits 0" "$?" "0"
 out_has "codex-pinned call lands on Haiku" '"model":"claude-bridge/claude-haiku-5-5"'
 is "codex-pinned call makes one pi call" "$(wc -l <"$STUB_ARGV")" "1"
 is "codex never called" "$(grep -c 'openai-codex' "$STUB_ARGV")" "0"
-is "quota-axi asked for deepseek" "$(grep -c -- '--provider deepseek ' "$STUB_QUOTA_LOG")" "1"
+is "quota-axi never asked for deepseek" "$(grep -c -- '--provider deepseek ' "$STUB_QUOTA_LOG")" "0"
 
 # 0b. GLM is out of the chain: a GLM-pinned call never reaches GLM, it runs DeepSeek.
 nodead
