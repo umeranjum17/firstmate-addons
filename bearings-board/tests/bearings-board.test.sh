@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Wrapper test: a stub Firstmate checkout stands in for the real board. Covers
 # build and path passthrough, argument forwarding, the recursion guard, and install
-# and uninstall round trips including their failure paths, hook cleanup, and the
-# hook's file, mode and links surviving that round trip.
+# and uninstall round trips including their failure paths, dry runs, hook cleanup,
+# and the hook's file, mode and links surviving that round trip.
 set -eu
 
 ADDON=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -48,6 +48,17 @@ grep -q "$LAUNCHER" "$FMH/config/bearings-board-command" || fail "hook not point
 [ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "hook not restored"
 [ -z "$(ls "$FMH/config/"*.bak-bearings-board-thin-* 2>/dev/null)" ] || fail "backup left behind after restore"
 
+# Rerunning install to update is supported: the hook install wrote stays pointed at the
+# launcher, the backup recorded by the first install is kept, and uninstall still
+# restores the operator's content with no backup left behind.
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install before a rerun failed"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "rerun over a hook install wrote failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = "$LAUNCHER" ] || fail "rerun changed the hook install wrote"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall after a rerun failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "uninstall after a rerun lost the original hook content"
+[ ! -e "$LAUNCHER" ] || fail "launcher left behind after a rerun"
+[ -z "$(ls "$FMH/config/"*.bak-bearings-board-thin-* 2>/dev/null)" ] || fail "backup left behind after a rerun"
+
 # A home hook is often a symlink into shared config: the round trip must write through
 # the link and leave the link and the shared file's mode as they were.
 printf 'old\n' > "$FMH/config/shared-board-command"
@@ -74,6 +85,19 @@ chmod 600 "$FMH/config/bearings-board-command"
 [ "$(stat -c %a "$FMH/config/bearings-board-command")" = 600 ] || fail "uninstall changed the hook mode"
 [ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "mode-0600 hook content not restored"
 chmod 644 "$FMH/config/bearings-board-command"
+
+# Dry runs report what they would do and write nothing, install and uninstall alike.
+"$ADDON/install.sh" --dry-run "$FMH" >/dev/null || fail "install dry run failed"
+[ ! -e "$LAUNCHER" ] || fail "install dry run wrote the launcher"
+[ ! -e "$FMH/state/bearings-board-thin.install" ] || fail "install dry run wrote the record"
+[ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "install dry run changed the hook"
+[ -z "$(ls "$FMH/config/"*.bak-bearings-board-thin-* 2>/dev/null)" ] || fail "install dry run wrote a backup"
+"$ADDON/install.sh" "$FMH" >/dev/null || fail "install before a dry uninstall failed"
+"$ADDON/uninstall.sh" --dry-run "$FMH" >/dev/null || fail "uninstall dry run failed"
+[ -x "$LAUNCHER" ] || fail "uninstall dry run removed the launcher"
+[ "$(cat "$FMH/config/bearings-board-command")" = "$LAUNCHER" ] || fail "uninstall dry run changed the hook"
+"$ADDON/uninstall.sh" "$FMH" >/dev/null || fail "uninstall after a dry run failed"
+[ "$(cat "$FMH/config/bearings-board-command")" = old ] || fail "hook not restored after a dry run"
 
 "$ADDON/install.sh" "$FMH" >/dev/null || fail "second install failed"
 printf 'exec %s "$@"\n' "$LAUNCHER" > "$FMH/config/bearings-board-command"
