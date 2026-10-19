@@ -27,7 +27,7 @@ cat > "$d/fork/bin/fm-busy-lib.sh" <<'FAKE'
 fm_busy_classify_semantic() { printf 'idle opencode-plugin\n'; }
 FAKE
 
-# shellcheck disable=SC2329 # the watcher helpers are called by the sourced library
+# shellcheck disable=SC2317,SC2329 # the watcher helpers are called by the sourced library
 # run <addons-dir> <wake-file>: the exact step-B watcher lines over two idle lanes
 # that fail with the same provider error.
 run() {
