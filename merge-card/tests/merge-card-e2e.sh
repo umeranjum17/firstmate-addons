@@ -232,6 +232,11 @@ is "file that changed after the run: card carries no receipt" "$(jq -c 'has("run
 is "file the run does not list: card carries no receipt" "$(jq -c 'has("run")' "$work/card-unlisted/card.json")" false
 is "no run record: card carries no receipt" "$(jq -c 'has("run")' "$work/card-newer/card.json")" false
 is "missing Checks lines: receipt still attached with fallbacks" "$(jq -c '.run | [.outcome, .repro, .proof, .evidence]' "$work/card-bare/card.json")" "$(jq -cn --arg r 20261020T000000Z-bare0001 '["a stopped worker moves to the next live route","not stated in the Checks block","done-done run \($r)","\($r)/shot.png"]')"
+rid=20261020T000000Z-abspath0001
+mk_run abspath "$rid" "$head_c" 0 "$rid/shot.png"
+checks abspath "$home/data/abspath/$rid/shot.png"
+receipt_post abspath
+is "receipt: local folders stripped from the evidence and proof" "$(jq -c '.run | [.evidence, .proof]' "$work/card-abspath/card.json")" '["shot.png","no verify skill"]'
 checks gone gone.png
 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check gone "$wt" "$head_c" -
 is "gone: recorded verdict" "$(jq -r .verdict "$home/data/gone/merge-card.json")" fail
