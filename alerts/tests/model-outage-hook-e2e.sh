@@ -63,7 +63,7 @@ run "$d/no-addons" "$d/absent.wakes"
 [ ! -e "$d/absent.wakes" ] || { echo "FAIL: absent add-on must raise no wake" >&2; exit 1; }
 [ ! -e "$d/triage.log" ] || { echo "FAIL: absent add-on must log nothing" >&2; cat "$d/triage.log" >&2; exit 1; }
 # Push-transition hook: cursor and open-captain-call tasks suppress, others do not.
-# shellcheck disable=SC2031,SC2329 # the sourced hook calls the stubs
+# shellcheck disable=SC2031,SC2317,SC2329 # the sourced hook calls the stubs
 (
   export FM_HOME=$d/fork SCRIPT_DIR=$d/fork/bin STATE=$d/state-push
   mkdir -p "$STATE"
