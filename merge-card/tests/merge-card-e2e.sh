@@ -126,7 +126,7 @@ cp -r "$(dirname "$from")" "$SO_CAPTURE"
 STUB
 chmod +x "$work/bin/done-done" "$work/bin/sign-off-axi" "$work/bin/gh"
 
-head_c=e2ehead0000000000000000000000000000000000
+head_c=abababababababababababababababababababab
 : >"$work/so.log"
 export SO_LOG=$work/so.log
 
@@ -183,21 +183,47 @@ run_check_and_post absolute
 is "absolute: recorded verdict" "$(jq -r .verdict "$home/data/absolute/merge-card.json")" pass
 is "absolute: evidence unchanged" "$(jq -c .check.evidence "$home/data/absolute/merge-card.json")" '["'"$shot"'"]'
 if [ -f "$work/card-absolute/1.png" ] && cmp -s "$work/card-absolute/1.png" "$shot"; then ok "absolute: card media resolves to the PNG"; else no "absolute: card media is not the PNG"; fi
-# The passed-test receipt: a pass citing a sealed clean done-done run carries that run on the
-# card; the same pass citing a run that exited 1, or a hand-made file, carries none.
-for r in receipt:0 failedrun:1; do
-  t=${r%:*}; runid=20261020T000000Z-${t}0001; rc_exit=${r#*:}
-  MODE=newer DD_LOG=$work/args.log SO_CAPTURE=$work/card-$t
+# The passed-test receipt: a pass citing a file that a sealed clean done-done run at the merged head
+# lists carries that run on the card; a failed run, a run at another head, or a file the run does not
+# list carries none; Checks lines the block lacks are filled in, not dropped.
+mk_run() { # mk_run <task-id> <run-id> <commit> <exit> <listed-path>
+  mkdir -p "$home/data/$1/$2" "$home/data/$1/.done-done/runs"
+  cp "$shot" "$home/data/$1/$2/shot.png"
+  jq -n --arg id "$2" --arg c "$3" --argjson e "$4" --arg p "$5" \
+    '{schema:1,run_id:$id,commit:$c,tree:("cd"*20),dirty:false,exit:$e,files:[{path:$p,sha256:("00"*32),bytes:1}]}' \
+    >"$home/data/$1/.done-done/runs/$2.json"
+}
+receipt_post() { # receipt_post <task-id>: post with the newer done-done into card-<task-id>
+  MODE=newer DD_LOG=$work/args.log SO_CAPTURE=$work/card-$1
   export MODE DD_LOG SO_CAPTURE
-  mkdir -p "$home/data/$t/$runid" "$home/data/$t/.done-done/runs"
-  cp "$shot" "$home/data/$t/$runid/shot.png"
-  jq -n --arg id "$runid" --argjson e "$rc_exit" '{schema:1,run_id:$id,commit:("ab"*20),tree:("cd"*20),dirty:false,exit:$e,files:[{path:($id+"/shot.png"),sha256:("00"*32),bytes:1}]}' >"$home/data/$t/.done-done/runs/$runid.json"
-  checks "$t" "$runid/shot.png"
-  run_check_and_post "$t"
-done
+  run_check_and_post "$1"
+}
+rid=20261020T000000Z-receipt0001
+mk_run receipt "$rid" "$head_c" 0 "$rid/shot.png"
+checks receipt "$rid/shot.png"
+receipt_post receipt
+rid=20261020T000000Z-failedrun0001
+mk_run failedrun "$rid" "$head_c" 1 "$rid/shot.png"
+checks failedrun "$rid/shot.png"
+receipt_post failedrun
+rid=20261020T000000Z-otherhead0001
+mk_run otherhead "$rid" cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd 0 "$rid/shot.png"
+checks otherhead "$rid/shot.png"
+receipt_post otherhead
+rid=20261020T000000Z-unlisted0001
+mk_run unlisted "$rid" "$head_c" 0 "$rid/other.png"
+checks unlisted "$rid/shot.png"
+receipt_post unlisted
+rid=20261020T000000Z-bare0001
+mk_run bare "$rid" "$head_c" 0 "$rid/shot.png"
+printf '## Checks\n\nevidence: %s\n' "$rid/shot.png" >"$home/data/bare/checks.md"
+receipt_post bare
 is "receipt: card carries the run" "$(jq -c '.run | [.run_id, .commit, .outcome, .proof]' "$work/card-receipt/card.json")" '["20261020T000000Z-receipt0001","abababababababababababababababababababab","a stopped worker moves to the next live route","no verify skill"]'
 is "failed run: card carries no receipt" "$(jq -c 'has("run")' "$work/card-failedrun/card.json")" false
+is "run at another commit: card carries no receipt" "$(jq -c 'has("run")' "$work/card-otherhead/card.json")" false
+is "file the run does not list: card carries no receipt" "$(jq -c 'has("run")' "$work/card-unlisted/card.json")" false
 is "no run record: card carries no receipt" "$(jq -c 'has("run")' "$work/card-newer/card.json")" false
+is "missing Checks lines: receipt still attached with fallbacks" "$(jq -c '.run | [.outcome, .repro, .proof, .evidence]' "$work/card-bare/card.json")" "$(jq -cn --arg r "$rid" '["a stopped worker moves to the next live route","not stated in the Checks block","done-done run \($r)","\($r)/shot.png"]')"
 checks gone gone.png
 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check gone "$wt" "$head_c" -
 is "gone: recorded verdict" "$(jq -r .verdict "$home/data/gone/merge-card.json")" fail
