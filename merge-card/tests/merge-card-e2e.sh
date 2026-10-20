@@ -135,9 +135,9 @@ run_check_and_post() { # run_check_and_post <task-id> [<pr-url>] (<mode> is alre
   PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" post --board "$work/board.json" "$1" "$wt" "$head_c" "${2:--}"
 }
 
-checks() { # checks <task-id> <evidence>: the task folder's Checks block
+checks() { # checks <task-id> <evidence> [<proof>]: the task folder's Checks block
   mkdir -p "$home/data/$1"
-  printf '## Checks\n\noutcome: a stopped worker moves to the next live route\nrepro: n/a\nproof: no verify skill\nevidence: %s\n' "$2" >"$home/data/$1/checks.md"
+  printf '## Checks\n\noutcome: a stopped worker moves to the next live route\nrepro: n/a\nproof: %s\nevidence: %s\n' "${3:-no verify skill}" "$2" >"$home/data/$1/checks.md"
 }
 
 # A newer done-done: the flag is passed, the verdict's evidence already resolved,
@@ -234,9 +234,9 @@ is "no run record: card carries no receipt" "$(jq -c 'has("run")' "$work/card-ne
 is "missing Checks lines: receipt still attached with fallbacks" "$(jq -c '.run | [.outcome, .repro, .proof, .evidence]' "$work/card-bare/card.json")" "$(jq -cn --arg r 20261020T000000Z-bare0001 '["a stopped worker moves to the next live route","not stated in the Checks block","done-done run \($r)","\($r)/shot.png"]')"
 rid=20261020T000000Z-abspath0001
 mk_run abspath "$rid" "$head_c" 0 "$rid/shot.png"
-checks abspath "$home/data/abspath/$rid/shot.png"
+checks abspath "$home/data/abspath/$rid/shot.png" /home/umer/run/proof.txt
 receipt_post abspath
-is "receipt: local folders stripped from the evidence and proof" "$(jq -c '.run | [.evidence, .proof]' "$work/card-abspath/card.json")" '["shot.png","no verify skill"]'
+is "receipt: local folders stripped from the evidence and proof" "$(jq -c '.run | [.evidence, .proof]' "$work/card-abspath/card.json")" '["shot.png","proof.txt"]'
 checks gone gone.png
 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check gone "$wt" "$head_c" -
 is "gone: recorded verdict" "$(jq -r .verdict "$home/data/gone/merge-card.json")" fail
