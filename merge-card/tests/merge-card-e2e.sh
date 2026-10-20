@@ -13,7 +13,7 @@
 # one evidence card titled with the claim; every gap posts nothing, prints one
 # gap line and exits 0, and no run ever posts a report card. The recorded
 # verdict, the invocation the stub saw, and whether the card's media resolves are
-# asserted in each mode. Needs bash, jq, base64, cmp and sort -V on PATH; nothing
+# asserted in each mode. Needs bash, jq, base64, cmp, sha256sum and sort -V on PATH; nothing
 # is posted anywhere and no real tool outside this directory is touched.
 set -u
 
@@ -187,10 +187,12 @@ if [ -f "$work/card-absolute/1.png" ] && cmp -s "$work/card-absolute/1.png" "$sh
 # lists carries that run on the card; a failed run, a run at another head, or a file the run does not
 # list carries none; Checks lines the block lacks are filled in, not dropped.
 mk_run() { # mk_run <task-id> <run-id> <commit> <exit> <listed-path>
+  local sha
   mkdir -p "$home/data/$1/$2" "$home/data/$1/.done-done/runs"
   cp "$shot" "$home/data/$1/$2/shot.png"
-  jq -n --arg id "$2" --arg c "$3" --argjson e "$4" --arg p "$5" \
-    '{schema:1,run_id:$id,commit:$c,tree:("cd"*20),dirty:false,exit:$e,files:[{path:$p,sha256:("00"*32),bytes:1}]}' \
+  sha=$(sha256sum "$shot" | cut -d' ' -f1)
+  jq -n --arg id "$2" --arg c "$3" --argjson e "$4" --arg p "$5" --arg s "$sha" \
+    '{schema:1,run_id:$id,commit:$c,tree:("cd"*20),dirty:false,exit:$e,files:[{path:$p,sha256:$s,bytes:1}]}' \
     >"$home/data/$1/.done-done/runs/$2.json"
 }
 receipt_post() { # receipt_post <task-id>: post with the newer done-done into card-<task-id>
@@ -221,9 +223,15 @@ receipt_post bare
 is "receipt: card carries the run" "$(jq -c '.run | [.run_id, .commit, .outcome, .proof]' "$work/card-receipt/card.json")" '["20261020T000000Z-receipt0001","abababababababababababababababababababab","a stopped worker moves to the next live route","no verify skill"]'
 is "failed run: card carries no receipt" "$(jq -c 'has("run")' "$work/card-failedrun/card.json")" false
 is "run at another commit: card carries no receipt" "$(jq -c 'has("run")' "$work/card-otherhead/card.json")" false
+rid=20261020T000000Z-changed0001
+mk_run changed "$rid" "$head_c" 0 "$rid/shot.png"
+printf 'replaced' >"$home/data/changed/$rid/shot.png"
+checks changed "$rid/shot.png"
+receipt_post changed
+is "file that changed after the run: card carries no receipt" "$(jq -c 'has("run")' "$work/card-changed/card.json")" false
 is "file the run does not list: card carries no receipt" "$(jq -c 'has("run")' "$work/card-unlisted/card.json")" false
 is "no run record: card carries no receipt" "$(jq -c 'has("run")' "$work/card-newer/card.json")" false
-is "missing Checks lines: receipt still attached with fallbacks" "$(jq -c '.run | [.outcome, .repro, .proof, .evidence]' "$work/card-bare/card.json")" "$(jq -cn --arg r "$rid" '["a stopped worker moves to the next live route","not stated in the Checks block","done-done run \($r)","\($r)/shot.png"]')"
+is "missing Checks lines: receipt still attached with fallbacks" "$(jq -c '.run | [.outcome, .repro, .proof, .evidence]' "$work/card-bare/card.json")" "$(jq -cn --arg r 20261020T000000Z-bare0001 '["a stopped worker moves to the next live route","not stated in the Checks block","done-done run \($r)","\($r)/shot.png"]')"
 checks gone gone.png
 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check gone "$wt" "$head_c" -
 is "gone: recorded verdict" "$(jq -r .verdict "$home/data/gone/merge-card.json")" fail
