@@ -17,6 +17,11 @@ and the per-cycle call with
 Absent add-on = kun behavior. `tests/model-outage-hook-e2e.sh` (with
 `FM_TEST_FORK` set to a Firstmate checkout) proves both cases over fixture lanes.
 
+The same library defines `fm_alerts_push_suppress <task>`, which the fork's
+`handle_push_transition` calls (when defined) instead of its old inline check: it
+returns 0 for a cursor-harness task or one with an open captain call, non-zero
+otherwise or when the watcher's `fm_meta_get`/`task_captain_call_open` are absent.
+
 ## Layout
 
 - `bin/fm-model-outage-lib.sh` — the observer. `fm_model_outage_tick` reads each
