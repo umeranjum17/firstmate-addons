@@ -3,6 +3,7 @@ set -euo pipefail
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 d=$(mktemp -d)
 trap 'rm -rf -- "$d"' EXIT
+export HOME=$d/user XDG_DATA_HOME=$d/data
 home=$d/home
 mkdir -p "$home/bin" "$home/config"
 FM_ADDONS_DIR=$(cd "$SRC/.." && pwd -P)
