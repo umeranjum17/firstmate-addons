@@ -20,5 +20,6 @@ awk -F'\t' -v pr="$4" -v head="$3" -v task="$1" '
   pr != "-" { if ($2 == pr && $3 == head) f = 1; next }
   $3 == head || ($3 == "-" && $2 !~ /^https?:/ && $2 ~ ("/" task "/[^/]*$")) { f = 1 }
   END { exit !f }' "$FM_HOME/data/checks-gate.log" 2>/dev/null && exit 0
-echo "owner-rules: no checks-lint PASS for $4 at $3; run FM_HOME=$FM_HOME config/fm-checks-lint.sh ${4/#-/<report file>} <evidence folder> first"
+src=$4; [ "$4" != - ] || src="<report file>"
+echo "owner-rules: no checks-lint PASS for $src at $3; run FM_HOME=$FM_HOME config/fm-checks-lint.sh $src <evidence folder> first"
 exit 1
