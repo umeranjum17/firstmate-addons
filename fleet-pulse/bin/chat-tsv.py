@@ -14,6 +14,11 @@ WRAPPERS = {
     'main_dialog_mirror': re.compile(r'(?i)main dialog mirror'),
     'compaction_summary': re.compile(r'(?i)summarized conversation'),
     'artifact_content': re.compile(r'(?i)<artifact-content(?:-[a-z0-9_-]+)?\s*/?>|artifact-content wrapper'),
+    'supervision_wake': re.compile(r'(?i)firstmate supervision wake'),
+    'operational_inbox': re.compile(r'(?i)firstmate operational inbox message'),
+    'instruction_waiting': re.compile(r'(?i)firstmate instruction waiting'),
+    'stop_hook_wake': re.compile(r'(?im)^\s*stop[- ]hook(?: wake)?'),
+    'watcher_wake': re.compile(r'(?im)^\s*watcher[- ]wake|^\s*watcher wake'),
 }
 BLOCKS = re.compile(r'(?is)<(system-reminder|firstmate-instruction|firstmate-operational-input|pasted_content|cross-session-message|task-notification)>.*?</\1>')
 COMMAND_WRAPPER = re.compile(r'(?is)<(?:command-name|command-args|local-command(?:-stdout|-stderr|-caveat)?)(?:\s|>)')
@@ -143,6 +148,9 @@ def main():
             if not body:
                 drops['injected_only' if hits or block_hits or line_drops or line_count else 'empty_content'] += 1
                 continue
+            if not any(char.isalnum() for char in body):
+                drops['punctuation_only'] += 1
+                continue
             if re.match(r'(?i)^(system|hook|notification|firstmate instruction waiting|firstmate operational input|local-command|/\w+)', body):
                 drops['command_or_injected_envelope'] += 1
                 continue
@@ -165,7 +173,6 @@ def main():
     os.chmod(sidecar, 0o600)
     summary = ', '.join(f'{key}={value}' for key, value in sorted(drops.items())) or 'none'
     print(f'appended={len(rows)} drops={summary}', file=sys.stderr)
-    print(f'appended {len(rows)} rows')
 
 
 if __name__ == '__main__':

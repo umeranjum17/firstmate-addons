@@ -19,6 +19,13 @@ rows = [
     ('block-1', 'Keep this sentence. <system-reminder>injected reminder</system-reminder> <pasted_content>injected pasted text</pasted_content> keep this too.'),
     ('command-1', '<command-name>local command</command-name><local-command-stdout>output</local-command-stdout>'),
     ('slash-1', '/local-command output'),
+    ('wake-1', 'FIRSTMATE SUPERVISION WAKE: injected context'),
+    ('inbox-1', 'Firstmate operational inbox message: injected context'),
+    ('waiting-1', 'Firstmate instruction waiting: injected context'),
+    ('stop-hook-1', 'Stop hook: injected wake'),
+    ('watcher-wake-1', 'Watcher wake: injected context'),
+    ('mixed-wake-1', 'This typed note stays. FIRSTMATE SUPERVISION WAKE: injected context'),
+    ('punctuation-1', ' : '),
     ('tool-1', [{'type': 'tool_result', 'content': 'tool output'}]),
     ('long-1', 'hello world ' * 500),
 ]
@@ -30,7 +37,7 @@ PY
 export FM_HOME=$home CHAT_TSV_TRANSCRIPTS=$transcripts
 extractor=$(dirname "${BASH_SOURCE[0]}")/../bin/chat-tsv.py
 python3 "$extractor" 2026-10-19 2026-10-21 > "$d/out" 2> "$d/audit" || { cat "$d/audit" >&2; exit 1; }
-[ "$(wc -l < "$home/data/chat.tsv")" -eq 4 ]
+[ "$(wc -l < "$home/data/chat.tsv")" -eq 5 ]
 [ "$(stat -c '%a' "$home/data/chat.tsv")" = 600 ]
 if grep -Eq '123456|sk-FAKEFAKEFAKE123456' "$home/data/chat.tsv" "$home/data/chat.tsv.seen"; then exit 1; fi
 python3 - "$home/data/chat.tsv" "$home/data/chat.tsv.seen" "$d/audit" <<'PY'
@@ -40,16 +47,16 @@ rows = [line.split('\t') for line in Path(sys.argv[1]).read_text().splitlines()]
 sidecar = Path(sys.argv[2]).read_text()
 audit = Path(sys.argv[3]).read_text()
 assert any('Please fix this, Umer.' in row[2] for row in rows)
-assert any('This typed note stays.' in row[2] for row in rows)
+assert sum('This typed note stays.' in row[2] for row in rows) == 2
 assert any('Keep this sentence.' in row[2] and 'keep this too.' in row[2] for row in rows)
 assert all(len(row[2]) <= 4000 for row in rows)
 assert any(row[2].endswith('[truncated]') for row in rows)
-assert not any(token in '\n'.join(row[2] for row in rows) for token in ('MAIN DIALOG MIRROR', 'Summarized conversation', 'artifact-content', 'injected reminder', 'injected pasted text', 'local-command'))
+assert not any(token in '\n'.join(row[2] for row in rows) for token in ('MAIN DIALOG MIRROR', 'Summarized conversation', 'artifact-content', 'injected reminder', 'injected pasted text', 'local-command', 'SUPERVISION WAKE', 'operational inbox message', 'instruction waiting', 'Stop hook', 'Watcher wake'))
 assert not any(secret in sidecar for secret in ('123456', 'sk-FAKEFAKEFAKE123456'))
-for reason in ('main_dialog_mirror=2', 'compaction_summary=2', 'artifact_content=1', 'command_envelope=1', 'injected_system-reminder=1', 'injected_pasted_content=1', 'slash_command=1', 'tool_content=1', 'truncated=1'):
+for reason in ('main_dialog_mirror=2', 'compaction_summary=2', 'artifact_content=1', 'command_envelope=1', 'injected_system-reminder=1', 'injected_pasted_content=1', 'slash_command=1', 'supervision_wake=2', 'operational_inbox=1', 'instruction_waiting=2', 'stop_hook_wake=1', 'watcher_wake=1', 'punctuation_only=1', 'tool_content=1', 'truncated=1'):
     assert reason in audit, reason
 PY
 python3 "$extractor" 2026-10-19 2026-10-21 > "$d/out2" 2> "$d/audit2"
-[ "$(wc -l < "$home/data/chat.tsv")" -eq 4 ]
+[ "$(wc -l < "$home/data/chat.tsv")" -eq 5 ]
 grep -Fq 'appended=0' "$d/audit2"
 echo 'PASS: wrappers filtered, mixed human text retained, audit counts emitted, secrets redacted, text capped, rerun idempotent'
