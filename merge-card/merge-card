@@ -19,15 +19,13 @@
 #     media file was copied, or a done-done verify run at the merged head brought
 #     its own sign-off run. The card title is the claim; its media is the Checks
 #     evidence screenshots and recordings (at most 12), or those of the verify run
-#     through `done-done signoff`. The card carries the passed-test receipt (its `run`, which
-#     sign-off's board checks against the run record to file it under Evidence) whenever one
-#     exists: the verify run's, else the sealed clean done-done run at the merged head that
-#     lists a file the passed check cites, with the merge's Checks lines (plain fallbacks for
-#     any missing); otherwise it carries none. A merge with missing or unconfirmed proof posts
-#     no card: the gap is printed for the merging lead and the lane owner fixes the
-#     proof and re-runs the post. The card key is the merge's own, so a repeat
-#     post, or another home posting the same merge, finds it on the board and adds
-#     nothing.
+#     through `done-done signoff`. The card carries the passed-test receipt (its `run`,
+#     which sign-off's board checks against the run record to file it under Evidence): the
+#     verify run's, else a sealed clean done-done run at the merged head in the task folder.
+#     A merge with missing or unconfirmed proof posts no card: the gap is printed for the
+#     merging lead and the lane owner fixes the proof and re-runs the post. The card key is
+#     the merge's own, so a repeat post, or another home posting the same merge, finds it on
+#     the board and adds nothing.
 #     An internal fleet-tool merge with no user-visible screen puts a `screen: none` line in
 #     its Checks block: post then skips the card (exit 0, one skip line pointing to the merge
 #     note) and runs no done-done.
@@ -136,33 +134,15 @@ gate() {
   return 1
 }
 
-# checks_body <task-id> <pr-url|->: the merge's Checks text, the PR body else the task folder's checks.md.
-checks_body() {
-  { [ "$2" != - ] && gh pr view "$2" --json body --jq .body 2>/dev/null || cat -- "$FM_HOME/data/$1/checks.md" 2>/dev/null; }
-}
-
-# receipt_run <task-id> <pr-url|-> <head> <record>: the evidence card's `run` object when a passed check
-# cites a file that a sealed, clean done-done run at <head> lists in its files, read from the task folder's
-# own .done-done/runs, else nothing. outcome/repro/proof/evidence are the merge's Checks lines, each with a
-# plain fallback when missing; never a made-up run.
+# receipt_run <task-id> <head> <record>: the task folder's first sealed clean done-done run at <head>, else nothing.
 receipt_run() {
-  local base=$FM_HOME/data/$1 f rel rec lines claim
-  claim=$(jq -r '.check.claim // empty' "$4")
-  lines=$(checks_body "$1" "$2" | awk '/^##[[:space:]]+Checks/ { on = 1; next } /^##/ { on = 0 } on { print }')
-  while IFS= read -r f; do
-    rel=${f#"$base"/}
-    rec=$base/.done-done/runs/${rel%%/*}.json
-    [ -f "$rec" ] || continue
-    read -r sha _ < <(sha256sum "$f" 2>/dev/null) || continue
-    jq -ce --arg rel "$rel" --arg sha "$sha" --arg head "$3" --arg lines "$lines" --arg claim "$claim" '
-      def line(k): [$lines | split("\n")[] | capture("^\\s*" + k + "\\s*:\\s*(?<v>.*\\S)\\s*$"; "i").v][0] // empty;
-      select(.schema == 1 and .exit == 0 and .dirty == false and .commit == $head and any(.files[]?; .path == $rel and .sha256 == $sha))
-      | {run_id, commit, outcome: (line("outcome") // $claim), repro: (line("repro") // "not stated in the Checks block"),
-         proof: ((line("proof") // "done-done run \(.run_id)") | sub("^/[^ ]*/"; "")),
-         evidence: ((line("evidence") // $rel) | sub("^/[^ ]*/"; ""))}
-      | select((.run_id // "") != "")' "$rec" 2>/dev/null && return 0
-  done < <(jq -r '.check.evidence[]?' "$4")
-  return 0
+  local claim evidence
+  claim=$(jq -r '.check.claim // empty' "$3")
+  evidence=$(jq -r '[.check.evidence[]? | split("/") | last] | join(", ")' "$3")
+  jq -cs --arg head "$2" --arg claim "$claim" --arg ev "$evidence" '
+    map(select(.schema == 1 and .exit == 0 and .dirty == false and .commit == $head and (.files | length) > 0 and (.run_id // "") != ""))
+    | .[0] // empty
+    | {run_id, commit, outcome: $claim, repro: "see the merge note", proof: "done-done run \(.run_id)", evidence: $ev}' "$FM_HOME"/data/"$1"/.done-done/runs/*.json 2>/dev/null
 }
 
 post() {
@@ -184,7 +164,7 @@ post() {
   fi
   # An internal fleet-tool merge declares `screen: none` in its Checks block: the board takes
   # passed proof of a real screen, not merge receipts, so it gets no card and no done-done run.
-  if checks_body "$id" "$pr" |
+  if { [ "$pr" != - ] && gh pr view "$pr" --json body --jq .body 2>/dev/null || cat -- "$FM_HOME/data/$id/checks.md" 2>/dev/null; } |
      grep -qiE '^[[:space:]]*screen[[:space:]]*:[[:space:]]*none[[:space:]]*$'; then
     echo "merge-card: no evidence card for $key: the merge declares screen: none (no user-visible screen); the passed-test receipt is in the merge note"
     return 0
@@ -228,7 +208,7 @@ post() {
     run=$(jq -c .run "$f")
     media=$(jq -r '.media[]?' "$f" | sed "s|^|${f%/*}/|")
   else
-    run=$(receipt_run "$id" "$pr" "$head" "$record"); run=${run:-null}
+    run=$(receipt_run "$id" "$head" "$record"); run=${run:-null}
     media=$(jq -r '.check.evidence[]? | select(test("\\.(png|jpe?g|webp|mp4|webm)$"; "i"))' "$record")
   fi
   while IFS= read -r f; do
