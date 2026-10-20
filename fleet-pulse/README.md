@@ -16,11 +16,15 @@ It writes `at`, `work`, and `text` as tab-separated columns; timestamps are UTC 
 
 `work` is the session cwd basename, except the home checkout itself (or missing cwd) is labelled `main`.
 
-Only user records with textual content are considered; metadata, sidechains, commands, reminders, and injected system/hook/notification text are discarded.
+Only user records with textual content are considered; metadata, sidechains, tool results, commands, reminders, and injected system/hook/notification wrappers are discarded.
 
-Recognized injected lines are removed while other message lines remain.
+Known mirror, compaction-summary, and artifact wrappers are removed; human text outside a wrapper is retained.
+
+Every discard and truncation reason is counted on stderr without including message text.
 
 Secrets and numeric codes are redacted before append, intentionally favoring false positives over disclosure.
+
+Text is capped at 4000 characters per row, with a `[truncated]` marker when capped.
 
 The output and sidecar are mode 600, and the data directory is mode 700.
 
@@ -28,4 +32,4 @@ The output and sidecar are mode 600, and the data directory is mode 700.
 
 ## Check
 
-`bash tests/chat-tsv.test.sh` exercises filtering, secret redaction, file permissions, and rerun idempotency using a disposable transcript and home.
+`bash tests/chat-tsv.test.sh` exercises wrapper filtering, retained mixed human text, drop counts, redaction, the text cap, file permissions, and rerun idempotency using a disposable transcript and home.
