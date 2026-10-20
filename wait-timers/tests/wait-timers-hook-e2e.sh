@@ -20,7 +20,7 @@ cp -a "$FM_TEST_FORK/bin" "$FM_TEST_FORK/tests" "$d/fork/"
 cp "$addons/wait-timers/tests/fm-wait-timers.test.sh" "$d/fork/tests/"
 
 # Present: the unmodified fork journey over the add-on library.
-(cd "$d/fork" && env -u FM_TASK_ID FM_HOME="$d/fork" FM_ADDONS_DIR="$d/addons" bash tests/fm-wait-timers.test.sh) > "$d/present.out" 2>&1 \
+(cd "$d/fork" && env -u FM_TASK_ID FM_WAIT_TIMERS_MAIN_ESCALATION_ONLY=1 FM_HOME="$d/fork" FM_ADDONS_DIR="$d/addons" bash tests/fm-wait-timers.test.sh) > "$d/present.out" 2>&1 \
   || { echo "FAIL: wait-timer journey with the add-on present" >&2; tail -20 "$d/present.out" >&2; exit 1; }
 
 # Absent: a Main-owned overdue episode cannot enqueue its check wake without
