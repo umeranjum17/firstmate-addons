@@ -146,7 +146,7 @@ receipt_run() {
 }
 
 post() {
-  local board='' id wt head pr record key link title about kind media run tmp out rc n=0 f verdict claim
+  local board='' id wt head pr record key link title about kind media run receipt=null tmp out rc n=0 f verdict claim
   [ "${1:-}" = --board ] && [ -n "${2:-}" ] && board=$2 && shift 2
   [ -n "$board" ] && [ $# -eq 4 ] || die "usage: merge-card post --board <board.json> <task-id> <worktree|-> <head|-> <pr-url|->"
   [ -n "${FM_HOME:-}" ] || die "FM_HOME is not set"
@@ -208,7 +208,8 @@ post() {
     run=$(jq -c .run "$f")
     media=$(jq -r '.media[]?' "$f" | sed "s|^|${f%/*}/|")
   else
-    run=$(receipt_run "$id" "$head" "$record"); run=${run:-null}
+    run=null
+    receipt=$(receipt_run "$id" "$head" "$record"); receipt=${receipt:-null}
     media=$(jq -r '.check.evidence[]? | select(test("\\.(png|jpe?g|webp|mp4|webm)$"; "i"))' "$record")
   fi
   while IFS= read -r f; do
@@ -221,6 +222,7 @@ post() {
     return 0
   fi
   kind=evidence
+  if [ "$run" = null ]; then run=$receipt; fi
   jq -n --arg kind "$kind" --arg key "$key" --arg title "$title" --arg about "$about" --arg link "$link" \
     --argjson run "$run" --argjson media "$media" '
     def clean(max): gsub("[\u0000-\u0009\u000b-\u001f\u007f-\u009f]"; " ") | if length > max then .[:max - 3] + "..." else . end;
