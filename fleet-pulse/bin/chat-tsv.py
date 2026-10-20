@@ -21,7 +21,7 @@ WRAPPERS = {
     'watcher_wake': re.compile(r'(?im)^\s*watcher[- ]wake|^\s*watcher wake'),
 }
 BLOCKS = re.compile(r'(?is)<(system-reminder|firstmate-instruction|firstmate-operational-input|pasted_content|cross-session-message|task-notification)>.*?</\1>')
-COMMAND_WRAPPER = re.compile(r'(?is)<(?:command-name|command-args|local-command(?:-stdout|-stderr|-caveat)?)(?:\s|>)')
+XML_STYLE_TAG = re.compile(r'<((?:task|system|command)-[A-Za-z0-9_-]+|local-command(?:-[A-Za-z0-9_-]+)?|bash-[A-Za-z0-9_-]+|user-prompt(?:-[A-Za-z0-9_-]+)?)\b[^>]*>', re.I)
 INJECTED_LINE = re.compile(r'(?i)(?:^|\s)(?:system:|hook:|notification:|firstmate instruction waiting|firstmate operational input)\b')
 
 
@@ -48,19 +48,22 @@ def extract_text(content):
 
 def clean(text):
     hits = [name for name, pattern in WRAPPERS.items() if pattern.search(text)]
-    command = COMMAND_WRAPPER.search(text)
-    if command:
-        hits.append('command_envelope')
     if hits:
-        positions = [WRAPPERS[name].search(text).start() for name in hits if name in WRAPPERS]
-        if command:
-            positions.append(command.start())
+        positions = [WRAPPERS[name].search(text).start() for name in hits]
         text = text[:min(positions)]
     block_hits = Counter()
     def remove_block(match):
         block_hits[f'injected_{match.group(1).lower()}'] += 1
         return ''
     text = BLOCKS.sub(remove_block, text)
+    xml_hits = Counter()
+    while match := XML_STYLE_TAG.search(text):
+        tag = match.group(1)
+        self_closing = match.group(0).rstrip().endswith('/>')
+        close = re.search(r'</' + re.escape(tag) + r'\s*>', text[match.end():], re.I) if not self_closing else None
+        end = match.end() if self_closing else match.end() + close.end() if close else len(text)
+        xml_hits[f'xml_{tag.lower()}'] += 1
+        text = text[:match.start()] + ' ' + text[end:]
     line_count = 0
     line_drops = Counter()
     kept = []
@@ -79,7 +82,7 @@ def clean(text):
             line_drops['slash_command'] += 1
             continue
         kept.append(line)
-    return ' '.join(kept), hits, block_hits, line_count, line_drops
+    return ' '.join(kept), hits, block_hits, xml_hits, line_count, line_drops
 
 
 def main():
@@ -138,15 +141,16 @@ def main():
             content, has_tools = extract_text(msg.get('content'))
             if has_tools:
                 drops['tool_content'] += 1
-            body, hits, block_hits, line_count, line_drops = clean(content)
+            body, hits, block_hits, xml_hits, line_count, line_drops = clean(content)
             for hit in hits:
                 drops[hit] += 1
             drops.update(block_hits)
+            drops.update(xml_hits)
             drops.update(line_drops)
             if line_count:
                 drops['injected_line'] += line_count
             if not body:
-                drops['injected_only' if hits or block_hits or line_drops or line_count else 'empty_content'] += 1
+                drops['injected_only' if hits or block_hits or xml_hits or line_drops or line_count else 'empty_content'] += 1
                 continue
             if not any(char.isalnum() for char in body):
                 drops['punctuation_only'] += 1
