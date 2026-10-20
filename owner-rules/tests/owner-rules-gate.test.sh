@@ -32,7 +32,7 @@ printf '{"schema":1,"answers_only":false,"items":[]}\n' > "$work/board.json"
 # shellcheck disable=SC2119,SC2120
 gate() { PATH=$work/bin:$PATH FM_HOME=$home FM_FLEET_BOARD=${3:-$work/board.json} "$home/config/merge-gate" lane - "${1:-$head}" "${2:-$pr}" 2>&1; printf 'rc=%s\n' "$?"; }
 main=$work/main; mkdir -p "$main/config"
-gate_inherit() { env -u FM_FLEET_BOARD PATH="$work/bin:$PATH" FM_HOME="$home" FM_MAIN_HOME="$main" "$home/config/merge-gate" lane - "${1:-$head}" "${2:-$pr}" 2>&1; printf 'rc=%s\n' "$?"; }
+gate_inherit() { env -u FM_FLEET_BOARD PATH="$work/bin:$PATH" FM_HOME="$home" FM_MAIN_HOME="$main" "$home/config/merge-gate" lane - "$head" "$pr" 2>&1; printf 'rc=%s\n' "$?"; }
 run=$home/data/lane/.done-done/runs/r1.json
 seal() { printf '{"schema":1,"exit":0,"dirty":false,"commit":"%s","files":["a.png"],"run_id":"r1"}\n' "$1" > "$run"; }
 
