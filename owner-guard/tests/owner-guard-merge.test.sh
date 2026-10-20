@@ -61,6 +61,12 @@ printf 'one\n' >"$d/work/notes.txt"
 git -C "$d/work" add notes.txt && wcommit -m base
 git -C "$d/work" push -q --no-verify origin main
 gate() { env FM_HOME="$FM" "$FM/config/merge-gate" "$@" 2>&1; }
+# A missing installed guard gets an actionable refusal, not an opaque exit 127.
+mv "$XDG_DATA_HOME/fm-owner-guard/owner-guard" "$d/guard.off"
+out=$(gate missing - HEAD -) && rc=0 || rc=$?
+check "missing guard refuses explicitly" "$rc" 1
+has "missing guard names recovery" "$out" "owner-guard is missing from this home; reinstall"
+mv "$d/guard.off" "$XDG_DATA_HOME/fm-owner-guard/owner-guard"
 
 git -C "$d/work" checkout -q -b clean
 printf 'two\n' >>"$d/work/notes.txt" && wcommit -am clean
