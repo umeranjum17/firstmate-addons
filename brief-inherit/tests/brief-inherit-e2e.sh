@@ -29,7 +29,8 @@ SEAM_LIST='_bi="${FM_ADDONS_DIR:-${FM_HOME:-$HOME}/projects/firstmate-addons}/br
 
 # The seam root: the checkout itself when it has the seam, else a step-B copy of it.
 root=$FM
-if ! grep -q fm_brief_inherit_shared "$FM/bin/fm-brief.sh"; then
+seamed=0; grep -q fm_brief_inherit_shared "$FM/bin/fm-brief.sh" && seamed=1
+if [ "$seamed" = 0 ]; then
   root=$work/root
   mkdir -p "$root" && cp -R "$FM/bin" "$root/bin" && cp "$FM"/AGENTS.md "$root/" 2>/dev/null
   awk -v seam="$SEAM_BRIEF" '
@@ -55,10 +56,10 @@ grep -q fm_brief_inherit_shared "$root/bin/fm-brief.sh" && grep -q fm_brief_inhe
 
 # The reference: the fork's pre-seam output, never the live checkout once it carries the seam.
 ref=$FM
-if grep -q fm_brief_inherit_shared "$FM/bin/fm-brief.sh"; then
+if [ "$seamed" = 1 ]; then
   ref=$work/ref
   mkdir -p "$ref" && cp -R "$FM/bin" "$ref/bin" && cp "$FM"/AGENTS.md "$ref/" 2>/dev/null
-  patch -s -p1 -d "$ref" < "$here/pre-seam-reference.patch" || { no "pre-seam reference patch does not apply to the checkout"; exit 1; }
+  patch -s -F0 -p1 -d "$ref" < "$here/pre-seam-reference.patch" || { no "pre-seam reference patch does not apply to the checkout"; exit 1; }
 fi
 
 empty=$work/no-addon; mkdir -p "$empty"
