@@ -3,7 +3,7 @@
 `merge-card` remains the gate/check/post executable documented in the root [README](../README.md#merge-card).
 Its existing config shims and card behavior are unchanged.
 
-## Optional fork adapters (step A)
+## Optional fork adapters
 
 `bin/fm-merge-hooks-lib.sh` owns the fork-only `fm_dod_merge_gate` and `fm_merge_post_hook` adapters, with their existing names, arguments, timeout defaults and messages.
 The gate prints output on success and failure; a failing, non-executable, dangling or timed-out gate refuses the merge.

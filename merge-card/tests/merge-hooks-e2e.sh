@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Real local landing through the fork's optional add-on seam (a private bin copy
-# of upstream Firstmate plus this add-on's loader). FM_TEST_FORK names a
-# read-only Firstmate checkout; no watcher is armed.
+# Real local landing through the fork's unmodified bin, which sources this
+# add-on's loader from FM_ADDONS_DIR. FM_TEST_FORK names a read-only Firstmate
+# checkout; no watcher is armed.
 set -euo pipefail
 addons=$(cd "$(dirname "$0")/../.." && pwd)
 : "${FM_TEST_FORK:?set FM_TEST_FORK to a Firstmate checkout}"
