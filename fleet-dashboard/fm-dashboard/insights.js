@@ -5,8 +5,11 @@ const seconds = n => n == null ? 'Unknown' : n < 60 ? '<1m' : dur(n)
 const bytes = n => n == null ? 'Unknown' : `≈${(n / 2 ** 30).toFixed(2)} GiB`
 const CAUSES = { captain: 'Captain hold', lead: 'Lead reply', ci_queue: 'CI queue', memory_gate: 'Memory limit', credential_external: 'Login or external wait', review_merge: 'Review or merge', unknown: 'Unclassified' }
 const STAGES = { working: 'Working', resolved: 'Working', blocked: 'Blocked', failed: 'Failed', paused: 'Waiting', 'needs-decision': 'Decision needed', 'captain-held': 'Held', done: 'Finished' }
+const WHY = [[/lane cap/i, 'Lane cap reached'], [/waiting on|waits on|blocked by|depends on|owner/i, 'Waits on another task or owner'],
+  [/host load|load avg|gate held|memory gate|quiet host|emulator|\bCI\b|until \d{4}-\d\d|rate limit|quota|login/i, 'External or time wait'],
+  [/held as draft|for Main review|awaiting review|waiting for merge/i, 'Review or merge wait'], [/parked/i, 'Parked by lead'], [/\brun(ning)?\b|rerun|in flight|resume/i, 'Own run in progress']]
 const Card = ({ label, value, note }) => html`<div class="i-stat"><span>${label}</span><b>${value}</b><small>${note}</small></div>`
-const Rows = ({ title, children }) => html`<details class="i-panel"><summary>${title}</summary><div class="i-rows">${children}</div></details>`
+const Rows = ({ title, open, children }) => html`<details class="i-panel" open=${open}><summary>${title}</summary><div class="i-rows">${children}</div></details>`
 const Row = ({ name, value, note, title }) => html`<div class="i-row" title=${title}><span>${name}${note && html`<small>${note}</small>`}</span><b>${value}</b></div>`
 function Trend({ days }) {
   const max = Math.max(...days.flatMap(d => [d.median_seconds || 0, d.p85_seconds || 0]), 1)
@@ -151,7 +154,7 @@ export function Insights({ d }) {
     for (const item of items) {
       const lane = lanes.find(l => l.home === item.home && l.task === item.task)
       const reason = lane?.open_waits.map(w => (w.display_reason || w.reason || '').trim()).find(r => r && !r.startsWith('unknown:'))
-      const label = !reason ? 'No reason recorded' : /lane cap/i.test(reason) ? 'Lane cap reached' : 'Other recorded reason'
+      const label = !reason ? 'No reason recorded' : WHY.find(([re]) => re.test(reason))?.[1] || `${STAGES[lane.stage] || 'Waiting'} · own note`
       groups.set(label, [...(groups.get(label) || []), item])
     }
     return [...groups].map(([label, rows]) => ({ ...b, items: rows, label,
@@ -171,10 +174,10 @@ export function Insights({ d }) {
     <div class="i-scope"><label>Scope <select aria-label="Insights home" value=${home} onChange=${e => { setHome(e.target.value); choose('') }}><option value="">All registered homes</option>${f.homes.map(h => html`<option value=${h}>${hname(d, h)}</option>`)}</select></label><small>Retained records · ${new Date(f.at * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}</small></div>
     <div class="i-stats"><${Card} label="Merged · 24 hours" value=${number(day.length)}/><${Card} label="Merged · 7 days" value=${number(merged.length)}/>
       <${Card} label="Time to merge · P50" value=${seconds(timed.median_seconds)} note=${`${timed.known} timed · ${timed.unknown} unknown`}/><${Card} label="Time to merge · P85" value=${seconds(timed.p85_seconds)}/>
-      <${Card} label="Open · recorded" value=${number(open.length)} note=${`${waiting.length} waiting · ${parked.length} parked · ${late.length} past stage clock`}/><${Card} label="Queued · recorded" value=${number(queue.length)} note=${`${groups[0][1]} dependencies · ${groups[1][1]} held`}/></div>
+      <${Card} label="Open · active only" value=${number(open.length)} note=${`${parked.length} parked, counted apart · ${waiting.length} waiting · ${late.length} past stage clock`}/><${Card} label="Queued · recorded" value=${number(queue.length)} note=${`${groups[0][1]} dependencies · ${groups[1][1]} held`}/></div>
     <section class="i-panel i-waits"><h2>Why work waits now</h2><p class="i-note">All homes · causes overlap</p>
       ${ranked.length ? ranked.map(b => html`<details class="i-wait"><summary><span>${b.label}</span><b title=${`${b.age == null ? 'No known wait' : seconds(b.age) + ' known lower bound'}; ${b.items.length} ${b.items.length === 1 ? 'task' : 'tasks'}; ${b.unknown} unknown durations`}>${b.age == null ? 'Unknown' : `${b.unknown ? '≥ ' : ''}${seconds(b.age)}`}</b><div><i style=${{ width: (b.age ?? 0) / maxWait * 100 + '%' }}></i></div><small>${b.items.length} ${b.items.length === 1 ? 'task' : 'tasks'}${b.unknown ? ` · ${b.unknown} unknown duration${b.unknown === 1 ? '' : 's'}` : ''}</small></summary><div class="i-rows">${b.items.map(item => { const lane = lanes.find(l => l.home === item.home && l.task === item.task), reason = lane?.open_waits.map(w => w.display_reason || w.reason).find(Boolean); return html`<${Row} name=${`${hname(d, item.home)} · ${title(lane || item)}`} value=${seconds(item.seconds)} note=${reason || `No reason recorded · ${item.home}/${item.task}`}/>` })}</div></details>`) : html`<p class="i-note">No open waits recorded.</p>`}
-      ${parked.length ? html`<${Rows} title=${`Parked by captain · ${parked.length} ${parked.length === 1 ? 'task' : 'tasks'} · not counted as open`}>${parked.map(l => html`<${Row} name=${`${hname(d, l.home)} · ${title(l)}`} value="Parked" note=${l.display_parked_reason || l.open_waits.find(w => w.cause === 'captain')?.display_reason || l.display_hold_reason || 'Captain hold reason not recorded'}/>` )}</${Rows}` : ''}
+      ${parked.length ? html`<${Rows} open title=${`Parked by captain · ${parked.length} ${parked.length === 1 ? 'task' : 'tasks'} · not counted as open`}>${parked.map(l => html`<${Row} name=${`${hname(d, l.home)} · ${title(l)}`} value="Parked" note=${l.display_parked_reason || l.open_waits.find(w => w.cause === 'captain')?.display_reason || l.display_hold_reason || 'Captain hold reason not recorded'}/>` )}</${Rows}` : ''}
     </section>
     ${stats}
     <div class="i-grid"><${Trend} days=${days}/><section class="i-panel"><h2>Why queued work has not started</h2>
