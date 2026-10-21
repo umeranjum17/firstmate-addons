@@ -23,4 +23,8 @@ bash "$repo/fleet-dashboard/fm-dashboard.sh" serve --bind 127.0.0.1 --port "$por
 pid=$!
 until curl -sf "http://127.0.0.1:$port/" >/dev/null; do sleep 1; done
 done-done look "http://127.0.0.1:$port/#/overview" --out "$evidence/overview-390.png"
+# The look step only sees the first screen; the whole Overview at the same width shows the card itself.
+chrome=${DONE_DONE_CHROME:-$(command -v chromium || command -v google-chrome-stable)}
+"$chrome" --headless --no-sandbox --user-data-dir="$work/chrome" --window-size=390,2600 --virtual-time-budget=4000 \
+  --screenshot="$evidence/overview-full-390.png" "http://127.0.0.1:$port/#/overview" >/dev/null 2>&1
 echo "run-proof: reading, test output and the 390px Overview are in $evidence"
