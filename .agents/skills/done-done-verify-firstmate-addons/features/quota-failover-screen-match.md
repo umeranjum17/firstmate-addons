@@ -6,7 +6,7 @@ Claude's route remains available when a worker screen contains the failover wrap
 
 ## Drive
 
-Run `bash quota-failover/tests/quota-failover-real-proof.sh` from the repository root. It invokes the real failover script against a disposable fixture home twice: first with wrapper text, then with Claude's exact usage-limit banner and a confirming probe. It does not use a real home or credentials.
+Run `bash quota-failover/run-proof.sh` from the repository root. It invokes the real failover script against a disposable fixture home twice: first with wrapper text, then with Claude's exact usage-limit banner and a confirming probe. It does not use a real home or credentials.
 
 ## Evidence
 

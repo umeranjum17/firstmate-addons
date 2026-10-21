@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo=$(cd "$(dirname "$0")/../.." && pwd)
+repo=$(cd "$(dirname "$0")/.." && pwd)
 evidence=${DONE_DONE_EVIDENCE_ROOT:?}
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
