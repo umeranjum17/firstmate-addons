@@ -44,17 +44,21 @@ cat >"$home/config/crew-dispatch.json" <<'DISPATCH'
 DISPATCH
 printf 'endpoint_task_id=cw\nharness=claude\nmodel=claude-haiku-5-5\nkind=crewmate\nspawn_gen=s0.cw\n' >"$home/state/cw.meta"
 printf 'quota exhausted' >"$home/state/cw.screen"
+: >"$home/state/quota-failover.log"
 export PATH="$stub:$PATH" QUOTA_FAILOVER_TEST_SECS=1 QUOTA_FAILOVER_PROBE_SECS=0 QUOTA_FAILOVER_RETEST_SECS=0 QUOTA_FAILOVER_STALL_SECS=0
 "$repo/quota-failover/quota-failover" "$home"
-cp "$home/state/cw.screen" "$evidence/wrapper-text.screen"
+cp "$home/state/cw.screen" "$evidence/wrapper-text.txt"
 cp "$home/config/crew-dispatch.json" "$evidence/after-wrapper.json"
 if ! jq -e '.default[0].model == "claude-haiku-5-5"' "$home/config/crew-dispatch.json" >/dev/null; then echo 'wrapper text unexpectedly removed route' >&2; exit 1; fi
+cp "$home/state/quota-failover.log" "$evidence/wrapper-log.txt"
+: >"$home/state/quota-failover.log"
 printf "%s\n" "You've hit your usage limit for your plan; try again in 3h" >"$home/state/cw.screen"
-cp "$home/state/cw.screen" "$evidence/real-limit-banner.screen"
+cp "$home/state/cw.screen" "$evidence/real-limit-banner.txt"
 CLAUDE_LIMIT=yes "$repo/quota-failover/quota-failover" "$home"
 cp "$home/config/crew-dispatch.json" "$evidence/after-limit-banner.json"
 cp "$home/state/quota-failover-dead.json" "$evidence/dead-routes.json"
-cp "$home/state/quota-failover.log" "$evidence/failover.log"
+cp "$home/state/quota-failover.log" "$evidence/limit-log.txt"
 jq -e '.default | length == 0' "$home/config/crew-dispatch.json" >/dev/null
 jq -e 'any(.[]; .model == "claude-haiku-5-5")' "$home/state/quota-failover-dead.json" >/dev/null
+jq -n --arg wrapperScreen "$(cat "$evidence/wrapper-text.txt")" --slurpfile wrapperDispatch "$evidence/after-wrapper.json" --rawfile wrapperLog "$evidence/wrapper-log.txt" --arg limitScreen "$(cat "$evidence/real-limit-banner.txt")" --slurpfile limitDispatch "$evidence/after-limit-banner.json" --slurpfile dead "$evidence/dead-routes.json" --rawfile limitLog "$evidence/limit-log.txt" '{wrapper_case:{screen:$wrapperScreen,dispatch:$wrapperDispatch[0],log:$wrapperLog,route_retained:($wrapperDispatch[0].default[0].model == "claude-haiku-5-5")},limit_case:{screen:$limitScreen,probe:{command:"claude -p --model claude-haiku-5-5",exit:1,output:"You\u0027ve hit your usage limit for your plan; try again in 3h"},dispatch:$limitDispatch[0],dead_routes:$dead[0],log:$limitLog,route_removed:(($limitDispatch[0].default|length)==0 and any($dead[0][]; .model=="claude-haiku-5-5"))}}' >"$evidence/result.json"
 printf 'PASS: wrapper screen retained route; real limit banner plus confirming one-line probe removed route.\n'

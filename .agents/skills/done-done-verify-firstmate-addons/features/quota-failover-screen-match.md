@@ -10,4 +10,4 @@ Run `bash quota-failover/run-proof.sh` from the repository root. It invokes the 
 
 ## Evidence
 
-The journey writes both `.screen` inputs, dispatch state before and after, dead-route state, and the failover log under `DONE_DONE_EVIDENCE_ROOT`. Check that `after-wrapper.json` still contains `claude-haiku-5-5` and `after-limit-banner.json` has no route; `dead-routes.json` records the removed route.
+The journey writes both screen inputs, separate dispatch/log results, and a `result.json` summary under `DONE_DONE_EVIDENCE_ROOT`. The summary records that wrapper text retains `claude-haiku-5-5` and the confirmed banner removes it; `dead-routes.json` contains the removed route.
