@@ -17,6 +17,7 @@ printf 'state=%s\ncommand=%s\n' "$w/pool" "$addons/claude-accounts/bin/claude-ac
 # The stub reads "<5h left> <7d left>" for each account folder from a1.q / a2.q.
 cat > "$w/bin/quota-axi" <<'S'
 #!/usr/bin/env bash
+[ ! -e "$QDIR/limit" ] || { echo '{"providers":[{"windows":[],"state":{"error":"rate limited"}}]}'; exit 1; }
 read -r h d < "$QDIR/$(basename "$CLAUDE_CONFIG_DIR").q" || exit 2
 echo "{\"providers\":[{\"windows\":[{\"id\":\"five_hour\",\"percentRemaining\":$h},{\"id\":\"seven_day\",\"percentRemaining\":$d}]}]}"
 S
@@ -34,6 +35,10 @@ q a1 "63 34"; q a2 "100 69"
 pick; is "account 2 has the most runway: the worker goes there" "$rc|$(cut -f1,3 <<<"$out")" "0|two	$w/a2"
 is "the pick unsets the credential variables by name" "$(cut -f4 <<<"$out" | tr ' ' '\n' | grep -c '^ANTHROPIC_API_KEY$')" 1
 q a2 "100 3"; pick; is "account 2 runs low: new workers go to account 1" "$rc|$(cut -f1 <<<"$out")" "0|one"
+# Rate limit on the vendor side: the pick still uses the last good readings.
+q a1 "63 34"; q a2 "100 69"; pick; touch "$w/limit"
+pick; is "a failed read keeps the last good pick" "$(cut -f1 <<<"$out")" two
+rm "$w/limit"
 q a2 "40 80"; pick; is "the tighter window sets the runway: account 2 (40) beats account 1 (34)" "$(cut -f1 <<<"$out")" two
 q a1 "63 34"; q a2 "100 69"; pick claude one; is "--prefer an account that is fine" "$(cut -f1 <<<"$out")" one
 q a2 "100 3"; pick claude two; is "--prefer a low account is refused with the cause" "$rc|${out%%:*}" "1|error"

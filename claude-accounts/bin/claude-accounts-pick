@@ -37,12 +37,13 @@ fi
 
 low=${FM_CLAUDE_ACCOUNTS_LOW:-5}
 # runway: the tighter of the windows that were read; an account with neither is not eligible.
-pick=$(jq -c --arg prefer "$prefer" --argjson low "$low" '
-  [.accounts[] | select(.problem == null)
+# A failed read keeps the last good windows (stale); they count while younger than FM_CLAUDE_ACCOUNTS_STALE_MAX (3600 s).
+pick=$(jq -c --arg prefer "$prefer" --argjson low "$low" --argjson now "$(date +%s)" --argjson max "${FM_CLAUDE_ACCOUNTS_STALE_MAX:-3600}" '
+  [.accounts[] | select(.problem == null or (.stale == true and $now - .read_at <= $max))
    | . + {runway: ([.five_hour.left, .seven_day.left] | map(select(. != null)) | min)}
    | select(.runway != null and .runway >= $low and ($prefer == "" or $prefer == "next" or .id == $prefer))]
   | sort_by(-.runway, -(.seven_day.left // 0)) | first // empty' "$file")
-[ -n "$pick" ] || fail "no Claude account has quota to spare${prefer:+ (asked for $prefer)}: each is read as failing or under $low% left"
+[ -n "$pick" ] || fail "no Claude account has quota to spare${prefer:+ (asked for $prefer)}: each is unread, stale or under $low% left"
 folder=$(jq -r '.folder' <<<"$pick")
 [ -d "$folder" ] || fail "the chosen Claude account's folder is missing"
 jq -cn --argjson p "$pick" --arg shed "$SHED" '{ok: true, id: $p.id, set: {CLAUDE_CONFIG_DIR: $p.folder}, unset: ($shed | split(" "))}'
