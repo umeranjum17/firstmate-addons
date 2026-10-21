@@ -326,7 +326,7 @@ a.ov-kpi:hover,button.ov-kpi:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--
 .ov-hrow{display:grid;grid-template-columns:10px minmax(70px,140px) minmax(60px,1fr) 44px 74px 82px;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;border-radius:4px}
 .ov-hrow:hover{background:var(--hover)}
 .ov-hrow:last-child{border-bottom:0}
-.ov-hrow .num{color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.ov-hrow .num{white-space:nowrap;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
 .ov-hrow .num small{color:var(--ink-4)}
 .ov-load{display:flex;gap:2px;height:8px;border-radius:4px;background:var(--raise);overflow:hidden}
 .ov-load i{display:block;height:100%}
