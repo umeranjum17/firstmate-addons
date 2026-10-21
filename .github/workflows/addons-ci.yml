@@ -15,10 +15,9 @@ jobs:
   self-check:
     name: Add-on self-checks
     runs-on: ubuntu-latest
-    # Normal tier: a shellcheck pass and a bash parse over a handful of
-    # scripts, plus the stubbed e2e tests of the memory gate, route change,
-    # home flow check and GLM queue (about 20 s and a python3-yaml install).
-    timeout-minutes: 5
+    # The full-fork hook journeys take several minutes; leave room for them
+    # alongside shell checks and the stubbed add-on integration suites.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install tasks-axi for fork lifecycle tests
