@@ -229,6 +229,11 @@ function Overview({ d, od, go }) {
         <div class="ov-ql">${qr.map((x, k) => { const n = sum(x.by_home); return html`<div class="ov-qrow" key=${k}><span>${x.reason}</span>
           <span class="ov-bar">${qOk && n > 0 ? html`<i style=${{ width: `${n / qTop * 100}%`, background: `var(${QTONE[k] || '--grey'})` }}></i>` : ''}</span><b class="num">${qOk ? n : '–'}</b></div>` })}</div>
         <p class="ov-tot">Total <b class="num">${qOk ? sum(m.queue.value) : '–'}</b> queued</p></section>
+      ${q.claude_accounts?.length ? html`<section class="ov-card wide"><h3>Claude accounts</h3><div class="ov-ql ov-quota ov-ca">${q.claude_accounts.map((a, k) => html`<div key=${k}><b class="ov-can">${a.name}</b>
+        ${[['5 h', a.five_hour], ['7 d', a.seven_day]].map(([nm, w]) => { const left = w?.left, tone = left == null ? 'mut' : left <= 10 ? 'bad' : left <= 25 ? 'warn' : ''
+          return html`<div class="ov-qrow" key=${nm}><span>${nm}</span><span class=${'ov-bar ' + (left == null ? 'unk' : '')}><i style=${{ width: `${left == null ? 0 : Math.max(2, Math.min(100, 100 - left))}%`,
+            background: `var(${{ bad: '--red', warn: '--orange', mut: '--grey' }[tone] || '--green'})` }}></i></span><b class=${'num ' + tone}>${left == null ? '–' : `${Math.round(left)}% left`}</b></div>` })}
+        ${a.problem ? html`<small class="ov-qsub mut">${a.problem}</small>` : ''}</div>`)}</div></section>` : ''}
       <section class="ov-card wide"><h3>Quota runway</h3><div class="ov-ql ov-quota">${(q.quota_accounts || []).map((a, k) => {
         const w = a.limit || (a.windows || []).filter(x => x.used != null).sort((x, y) => y.used - x.used)[0]
         const tone = a.empty ? 'bad' : a.problem ? 'mut' : a.status === 'projected_exhaustion' ? 'warn' : ''
