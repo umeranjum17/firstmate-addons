@@ -6,7 +6,9 @@ The pipeline runs the route the no-mistakes config holds: the OpenRouter DeepSee
 
 ## Drive
 
-Run `bash pipeline-quota-failover/tests/pi-quota-failover-route.test.sh` from the repository root. The test drives the real wrapper against a stub pi and a stub quota-axi in a throwaway HOME and verifies that the default chain is the persisted pipeline route, that a call pinned to that route runs it, that a call pinned outside the chain lands on it and never on the pinned model, and that an `openrouter/*` route is killed by the deepseek idle limit rather than the generic one.
+Run `bash pipeline-quota-failover/run-proof.sh` from the repository root (the done-done journey `pipeline-route`). It drives the real wrapper `pipeline-quota-failover/pi-quota-failover` against a stub pi and a stub quota-axi in a throwaway HOME and captures the chain it holds, the fixture journey `pipeline-quota-failover/tests/pi-quota-failover-route.test.sh` and their exit codes in `$DONE_DONE_EVIDENCE_ROOT`.
+
+The same wrapper's longer journey is `pipeline-quota-failover/tests/pi-quota-failover-e2e.sh`. `pipeline-quota-failover/README.md`, the root `README.md` and `.github/workflows/addons-ci.yml` name the same commands.
 
 ## Evidence
 
