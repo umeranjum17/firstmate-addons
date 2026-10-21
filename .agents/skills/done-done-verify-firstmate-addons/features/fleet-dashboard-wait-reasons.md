@@ -6,8 +6,8 @@ Insights names each waiting task's recorded reason, leaves only missing reasons 
 
 ## Drive
 
-Use the task-approved live dashboard URL in an isolated Chrome page with `chrome-devtools-axi`. Open Insights, resize to `390 844`, capture the before screen, then refresh the candidate dashboard and capture the after screen. Expand each wait group and the parked group; check home/task names, the source reason, and that Open excludes parked tasks. The card must distinguish captain holds, parked projects, dependencies, lane caps and truly unrecorded reasons.
+Run `DASH_HOME=<home> FLOW_JSON=<saved fm-flow --json --capacity run of it> FM_BIN=<Firstmate bin/> done-done run fleet-dashboard-wait-reasons`. The committed `fleet-dashboard/run-proof.sh` builds and serves the dashboard from this checkout against that home's real fleet data, opens Insights at 390px with `chrome-devtools-axi`, and captures the page. A live fm-flow run takes minutes, so save it first with `FM_HOME=<home> bash fleet-flow/bin/fm-flow.sh --json --capacity` from a bin/ dir that holds its helper libraries.
 
 ## Evidence
 
-Keep the before and after captures and the observed counts under the task's done-done evidence folder. The Unclassified rows must enumerate each genuinely unrecorded home/task; do not use synthetic fixtures as the real-fleet proof.
+`after.png` shows the Open tile ("active only", parked count beside it), the "Why work waits now" groups and the expanded "Parked by captain" group; `card.txt` holds the same text. Check that no group is called Unclassified, each wait group names a real reason, and any "No reason recorded" row names its home and task. Do not use synthetic fixtures as the real-fleet proof.
