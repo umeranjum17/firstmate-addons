@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Install tasks-axi for fork lifecycle tests
+        run: npm install --global tasks-axi
       - name: Wait-timers hook journey
         run: |
           git clone --no-single-branch https://github.com/umeranjum17/firstmate.git "$RUNNER_TEMP/firstmate"
