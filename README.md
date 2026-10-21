@@ -94,6 +94,7 @@ bash delete-guard/install.sh --dry-run <home>
 bash read-guard/tests/read-guard.test.sh
 bash claude-model-guard/install.sh --dry-run
 bash zai-quota-check/tests/zai-quota-check-e2e.sh
+bash pipeline-quota-failover/tests/switch-route.test.sh
 bash pipeline-quota-failover/tests/pi-quota-failover-e2e.sh
 bash pipeline-quota-failover/tests/pi-quota-failover-route.test.sh
 bash pipeline-literal-delete/tests/pipeline-literal-delete.test.sh
@@ -117,7 +118,6 @@ bash pane-titles/tests/pane-titles.test.sh
 bash git-identity/tests/git-identity.test.sh
 parked-homes/install.sh <home>                           # verify-only; prints MISSING until the fork hooks merge
 tailscale-resilience/tailscale-resilience check --state-dir /tmp/tsr-check
-bash pipeline-quota-failover/tests/switch-route.test.sh
 ```
 
 The dormant and fork-hook add-ons are not wired into an unmodified install of the host tool, so there is nothing to check for them here.
