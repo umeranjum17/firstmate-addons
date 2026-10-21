@@ -247,7 +247,7 @@ function Overview({ d, od, go }) {
         return html`<button class="ov-hrow" key=${h.home} onClick=${() => go({ view: 'board', tab: 'active', home: [h.home], card: null })}>
         <span class="sq" style=${{ '--c': hc(d, h.home) }}></span><b>${hname(d, h.home)}</b>
         <span class="ov-load" title=${`${n ?? '?'} of ${h.plan} lanes`}>${ACTIVE.map(s => { const k = xs.filter(c => c.stage === s).length; return k ? html`<i key=${s} style=${{ width: `${k / cap * 100}%`, background: `var(--st-${s})` }}></i>` : '' })}</span>
-        <span class="num">${h.lanes?.status === 'unknown' ? '?' : n ?? '–'}<small>/${h.plan}</small></span>
+        <span class="num">${h.lanes?.status === 'unknown' ? '?' : n ?? '–'}<small> of ${h.plan}</small></span>
         <span class="num">${h.ready?.value ?? '–'}<small> ready</small></span>
         <span class="num">${h.closed?.status === 'unknown' ? '–' : h.closed?.value}<small> closed</small></span></button>` })}</div></section>
       <section class="ov-card wide"><h3>Recently landed</h3><div class="ov-merges">${(q.recent_merges || []).map((x, k) =>

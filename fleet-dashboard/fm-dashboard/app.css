@@ -341,7 +341,7 @@ a.ov-kpi:hover,button.ov-kpi:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--
   .ov-kpis{grid-template-columns:repeat(6,minmax(0,1fr))}
   .ov-kpi{grid-column:span 2}.ov-kpi:nth-child(n+4){grid-column:span 3}
   .ov-rail{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .ov-hrow{grid-template-columns:10px minmax(0,1fr) 56px 48px 66px;gap:8px}
+  .ov-hrow{grid-template-columns:10px minmax(0,1fr) 52px 56px 66px;gap:8px}
   .ov-hrow>.num:last-child{display:none}
 }
 .asks-ctl{display:flex;flex-wrap:wrap;gap:6px 0;padding-bottom:4px}
