@@ -25,4 +25,4 @@ chrome-devtools-axi resize 390 2500 >/dev/null
 sleep 4
 chrome-devtools-axi eval '(() => { const h = [...document.querySelectorAll("h2")].find(e => e.textContent.includes("Why work waits")); return JSON.stringify({ open: document.querySelectorAll(".i-stat")[4].innerText, card: h.parentElement.innerText }) })()' >"$DONE_DONE_EVIDENCE_ROOT/card.txt"
 chrome-devtools-axi screenshot "$DONE_DONE_EVIDENCE_ROOT/after.png" >/dev/null
-chrome-devtools-axi close >/dev/null
+chrome-devtools-axi stop >/dev/null
