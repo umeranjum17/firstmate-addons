@@ -26,7 +26,9 @@ id=$(cut -f1 <<<"$tuple"); folder=$(cut -f3 <<<"$tuple"); shed=$(cut -f4 <<<"$tu
 echo "pool pick for a new Claude worker: $id" >>"$evidence/pick.txt"
 prefix='env'
 for n in $shed; do prefix="$prefix -u $n"; done
-reply=$(cd "$work/cwd" && $prefix CLAUDE_CONFIG_DIR="$folder" claude -p --model claude-haiku-5-5 "Reply with the single word ok." 2>&1 | head -c 200)
+# Signed in on the picked folder, asked the way the pin check asks (exit status only, nothing printed).
+if env -i HOME="$HOME" PATH="$PATH" CLAUDE_CONFIG_DIR="$folder" claude auth status >/dev/null 2>&1; then echo "claude auth status on the picked profile: signed in" >>"$evidence/pick.txt"; fi
+reply=$(cd "$work/cwd" && $prefix CLAUDE_CONFIG_DIR="$folder" claude -p --model claude-haiku-5-5 "Reply with the single word ok." </dev/null 2>&1 | head -c 200)
 echo "throwaway worker (claude-haiku-5-5) on $id answered: $reply" >>"$evidence/pick.txt"
 "$repo/claude-accounts/bin/claude-accounts-quota.sh" >/dev/null
 summary after >>"$evidence/pick.txt"
