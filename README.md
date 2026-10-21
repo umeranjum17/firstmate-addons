@@ -117,6 +117,7 @@ bash pane-titles/tests/pane-titles.test.sh
 bash git-identity/tests/git-identity.test.sh
 parked-homes/install.sh <home>                           # verify-only; prints MISSING until the fork hooks merge
 tailscale-resilience/tailscale-resilience check --state-dir /tmp/tsr-check
+bash pipeline-quota-failover/tests/switch-route.test.sh
 ```
 
 The dormant and fork-hook add-ons are not wired into an unmodified install of the host tool, so there is nothing to check for them here.
