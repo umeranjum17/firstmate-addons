@@ -9,3 +9,9 @@ mkdir -p "$evidence"
 export FM_TEST_FORK=${FM_TEST_FORK:-$HOME/firstmate}
 bash "$repo/receipts/tests/receipts-hook-e2e.sh" 2>&1 | tee "$evidence/receipt-candidate.txt"
 test "${PIPESTATUS[0]}" -eq 0
+cat > "$evidence/steps.json" <<'J'
+{"target":{"version":"firstmate bin/fm-pr-check.sh from a read-only fork checkout, with this add-on's receipts library"},
+ "start":"a disposable firstmate home with one direct-PR task and a verified forge head",
+ "steps":["call fm_receipts_pr_candidate for a pull request outside the worktree's origin, for one in it, and with an empty head","run the real fm-pr-check.sh with the add-on library for the outside-origin and the same-repo pull request and read the candidate the gate receives"],
+ "result":"the outside-origin pull request's verified head is the receipt candidate; a same-repo or unverified one gives none; the transcript ends with ok"}
+J
