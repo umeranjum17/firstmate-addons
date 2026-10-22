@@ -45,7 +45,12 @@ all=(dispatch-resolve owner-guard checks-lint)
 [ "$#" -gt 0 ] || set -- "${all[@]}"
 failed=0
 for c in "$@"; do
-  case " ${all[*]} " in *" $c "*) ;; *) echo "usage: fleet-contract-check [${all[*]}]" >&2; exit 2 ;; esac
-  if why=$("check_${c//-/_}"); then echo "ok $c"; else echo "FAIL $c: $why"; failed=1; fi
+  case $c in
+    dispatch-resolve) run=check_dispatch_resolve ;;
+    owner-guard) run=check_owner_guard ;;
+    checks-lint) run=check_checks_lint ;;
+    *) echo "usage: fleet-contract-check [${all[*]}]" >&2; exit 2 ;;
+  esac
+  if why=$($run); then echo "ok $c"; else echo "FAIL $c: $why"; failed=1; fi
 done
 exit "$failed"
