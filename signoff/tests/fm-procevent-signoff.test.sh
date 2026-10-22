@@ -42,7 +42,7 @@ case "${1-}" in
   --version) echo 'sign-off-axi stub' ;;
   raise)
     shift
-    key='' title='' about='' close='' askref=''
+    key='' title='' about='' close='' askref='' why='' yes='' no='' rec='' recwhy='' dflt=''
     while [ "$#" -gt 1 ]; do
       case "$1" in
         --key) key=$2 ;;
@@ -50,6 +50,11 @@ case "${1-}" in
         --about) about=$2 ;;
         --close) close=$2 ;;
         --ask-ref) askref=$2 ;;
+        --why) why=$2 ;;
+        --outcome) case "$2" in yes=*) yes=$2 ;; no=*) no=$2 ;; esac ;;
+        --recommend) rec=$2 ;;
+        --recommend-reason) recwhy=$2 ;;
+        --default) dflt=$2 ;;
       esac
       shift 2
     done
@@ -57,6 +62,10 @@ case "${1-}" in
       echo "VALIDATION_ERROR: a new Decide card needs a captain ask reference. Pass --ask-ref <captain-message-id-or-hold-id>"
       exit 1
     fi
+    case "$title" in *\?) ;; *) echo 'VALIDATION_ERROR: --title must be a question ending in "?"'; exit 1 ;; esac
+    for need in why yes no rec recwhy dflt; do
+      [ -n "${!need}" ] || { echo "VALIDATION_ERROR: key $key: --$need is required"; exit 1; }
+    done
     if jq -e --arg k "$key" '.[$k].answer != null' "$SIGNOFF_BOARD" >/dev/null; then
       echo 'already answered'
       exit 0
@@ -123,7 +132,7 @@ out=$(adapter poll 2>/dev/null) || fail "poll found no answer for the re-held ta
 [ "$(printf '%s\n' "$out" | jq -s 'length')" = 1 ] || fail "poll offered more than the new answer: $out"
 [ "$(printf '%s\n' "$out" | jq -r .answer)" = 'use the other plan' ] \
   || fail "poll offered the earlier card's answer: $out"
-jq -e 'to_entries | all(.value.ask_ref == "T1")' "$SIGNOFF_BOARD" >/dev/null \
+jq -e 'to_entries | all(.value.ask_ref == "T1" and (.value.title == "Ship T1?"))' "$SIGNOFF_BOARD" >/dev/null \
   || fail "a raised card lacks the hold task id as its ask reference: $(cat "$SIGNOFF_BOARD")"
 pass "a task held again after an answered card gets a live card of its own, each raised with the hold id as --ask-ref"
 
@@ -219,11 +228,11 @@ real_env "$real_home" "$ROOT/bin/fm-captain-hold.sh" hold fm-sample-later \
   || fail "the dated deferral was not held"
 [ "$(board_count)" = "$before" ] || fail "a dated deferral raised a card: $(cat "$SIGNOFF_BOARD")"
 
-q=$(card_for "Pick the route")
+q=$(card_for "Pick the route?")
 [ -n "$q" ] || fail "the held question raised no card: $(cat "$SIGNOFF_BOARD")"
 jq -e --arg k "$q" '.[$k] | .about == "Which route?" and .close == "done"' "$SIGNOFF_BOARD" >/dev/null \
   || fail "the question card lost its reason or close: $(cat "$SIGNOFF_BOARD")"
-w=$(card_for "Gated work")
+w=$(card_for "Gated work?")
 [ -n "$w" ] || fail "the held existing work item raised no card: $(cat "$SIGNOFF_BOARD")"
 jq -e --arg k "$w" '.[$k] | .about == "captain approves the work" and .close == "release"' "$SIGNOFF_BOARD" >/dev/null \
   || fail "the work card lost its reason or close: $(cat "$SIGNOFF_BOARD")"
