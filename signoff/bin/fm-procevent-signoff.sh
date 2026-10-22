@@ -135,7 +135,7 @@ cmd_raise() {
     printf 'sign-off card not raised: the hold identity of %s could not be read\n' "$1" >&2
     return 1
   }
-  out=$(signoff raise --key "$(home_key_prefix)$1-$(stamp_token "${identity%%#*}")" --title "$2" --about "$3" --close "$4" 2>&1) || {
+  out=$(signoff raise --key "$(home_key_prefix)$1-$(stamp_token "${identity%%#*}")" --title "$2" --about "$3" --close "$4" --ask-ref "$1" 2>&1) || {
     printf 'sign-off-axi raise failed: %s\n' "$out" >&2
     return 1
   }

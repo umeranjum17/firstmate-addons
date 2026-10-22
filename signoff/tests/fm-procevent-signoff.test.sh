@@ -42,22 +42,27 @@ case "${1-}" in
   --version) echo 'sign-off-axi stub' ;;
   raise)
     shift
-    key='' title='' about='' close=''
+    key='' title='' about='' close='' askref=''
     while [ "$#" -gt 1 ]; do
       case "$1" in
         --key) key=$2 ;;
         --title) title=$2 ;;
         --about) about=$2 ;;
         --close) close=$2 ;;
+        --ask-ref) askref=$2 ;;
       esac
       shift 2
     done
+    if [ -z "$askref" ]; then
+      echo "VALIDATION_ERROR: a new Decide card needs a captain ask reference. Pass --ask-ref <captain-message-id-or-hold-id>"
+      exit 1
+    fi
     if jq -e --arg k "$key" '.[$k].answer != null' "$SIGNOFF_BOARD" >/dev/null; then
       echo 'already answered'
       exit 0
     fi
-    jq --arg k "$key" --arg t "$title" --arg a "$about" --arg c "$close" \
-      '.[$k] = {answer: null, label: "", close: $c, at: null, title: $t, about: $a}' \
+    jq --arg k "$key" --arg t "$title" --arg a "$about" --arg c "$close" --arg r "$askref" \
+      '.[$k] = {answer: null, label: "", close: $c, at: null, title: $t, about: $a, ask_ref: $r}' \
       "$SIGNOFF_BOARD" > "$SIGNOFF_BOARD.tmp" && mv "$SIGNOFF_BOARD.tmp" "$SIGNOFF_BOARD"
     echo raised
     ;;
@@ -118,7 +123,9 @@ out=$(adapter poll 2>/dev/null) || fail "poll found no answer for the re-held ta
 [ "$(printf '%s\n' "$out" | jq -s 'length')" = 1 ] || fail "poll offered more than the new answer: $out"
 [ "$(printf '%s\n' "$out" | jq -r .answer)" = 'use the other plan' ] \
   || fail "poll offered the earlier card's answer: $out"
-pass "a task held again after an answered card gets a live card of its own"
+jq -e 'to_entries | all(.value.ask_ref == "T1")' "$SIGNOFF_BOARD" >/dev/null \
+  || fail "a raised card lacks the hold task id as its ask reference: $(cat "$SIGNOFF_BOARD")"
+pass "a task held again after an answered card gets a live card of its own, each raised with the hold id as --ask-ref"
 
 rm -f "$HOLD_FILE" "$SIGNOFF_BOARD" "$FM_HOME_DIR/state/signoff-delivered"
 printf '{}\n' > "$SIGNOFF_BOARD"
