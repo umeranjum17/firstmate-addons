@@ -13,6 +13,6 @@ test "${PIPESTATUS[0]}" -eq 0
 cat > "$evidence/steps.json" <<'J'
 {"target":{"version":"fleet-contract-check from this checkout, run against the installed fork at ~/firstmate"},
  "start":"the installed fork and add-ons, with a throwaway HOME and FM_HOME",
- "steps":["run fleet-contract-check against the live fork config and read one line per caller","run the fixture journey that breaks owner-guard and dispatch-resolve and read which caller is named"],
+ "steps":["an operator runs the one fleet-contract-check command after a tool release and reads one line per cross-repo caller","the operator runs the fixture journey where a tool release breaks owner-guard and dispatch-resolve and finds which caller is named"],
  "result":"every caller prints ok on the installed fleet; a broken caller prints FAIL with its name and the check exits 1; the transcript ends with PASS"}
 J
