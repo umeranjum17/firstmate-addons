@@ -6,7 +6,18 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 evidence=${DONE_DONE_EVIDENCE_ROOT:?}
 mkdir -p "$evidence"
 {
+  echo "== installed fleet: every cross-repo caller"
   bash "$repo/fleet-contract-check/fleet-contract-check"
+  echo "== a tool release breaks owner-guard: the check names the caller and exits non-zero"
+  fork=$(mktemp -d)
+  mkdir -p "$fork/config"
+  printf '#!/usr/bin/env bash\n/nonexistent/fm-owner-guard/owner-guard merge-gate "$@"\n' > "$fork/config/merge-gate"
+  rc=0
+  FM_MAIN_HOME=$fork bash "$repo/fleet-contract-check/fleet-contract-check" owner-guard || rc=$?
+  echo "exit code: $rc"
+  rm -rf -- "$fork"
+  test "$rc" -eq 1
+  echo "== fixture journey"
   bash "$repo/fleet-contract-check/tests/fleet-contract-check.test.sh"
 } 2>&1 | tee "$evidence/fleet-contract-check.txt"
 test "${PIPESTATUS[0]}" -eq 0
