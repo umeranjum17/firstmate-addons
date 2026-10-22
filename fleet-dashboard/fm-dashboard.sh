@@ -2,7 +2,7 @@
 # fm-dashboard.sh - build and serve the fleet dashboard for this home (read-only but for ticket comments).
 #
 # The dashboard is the app in bin/fm-dashboard/ (vendored Preact, htm and Inter; no network
-# reference; light and dark): Board, a kanban of Building, Review,
+# reference; light and dark; neutral greys and one accent; it opens on Tickets and labels Overview Metrics): Board, a kanban of Building, Review,
 # Test, PR + CI and To merge with tabs for Queued, Landed today and All and rows by home on
 # request, whose cards carry the lane's model, age, pull request and, when it waits, why in plain
 # words; filters by home, model and state; a card's detail with its stages and activity; Tickets

@@ -110,7 +110,7 @@ done
 [ -n "$url" ] || { cat "$home/serve.log" >&2; exit 1; }
 
 export CHROME_DEVTOOLS_AXI_SESSION=$session
-chrome-devtools-axi open "$url" >/dev/null
+chrome-devtools-axi open "$url#/board" >/dev/null
 chrome-devtools-axi resize 390 844 >/dev/null
 chrome-devtools-axi wait "m-stuck" >/dev/null
 chrome-devtools-axi eval 'JSON.stringify({ viewport: innerWidth, text: document.body.innerText })' >"$DONE_DONE_EVIDENCE_ROOT/board.txt"
@@ -160,6 +160,9 @@ for w in 390 1280; do
   shot "ticket-page-dark-$w" "?dark-page-$w#/tickets?ticket=main/m-ask" "$w" 'Serves your ask'
 done
 chrome-devtools-axi eval 'localStorage.removeItem("fm-theme")' >/dev/null
+# The app opens on Tickets, and the phone dock names each view under its icon.
+shot landing-390 '?landing' 390 'Waiting on captain'
+for want in Tickets Board Metrics Insights 'Needs you'; do grep -qF -- "$want" "$DONE_DONE_EVIDENCE_ROOT/landing-390.txt" || { echo "run-core-proof: the landing page or dock lacks '$want'" >&2; exit 1; }; done
 # Tickets: the backlog mapped to board columns, and only the ask list waits on the captain.
 jq -e '([.tickets[] | {(.task): .state}] | add) as $s | ([.tickets[] | {(.task): .}] | add) as $t
   | $s["m-build"] == "progress" and $s["m-ci"] == "review" and $s["m-held"] == "hold" and $s["m-ready"] == "todo" and $s["m-shipped"] == "done"
