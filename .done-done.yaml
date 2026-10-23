@@ -33,3 +33,5 @@ journeys:
     command: bash read-guard/run-pool-proof.sh
   codex-guard-live:
     command: bash codex-guard/run-proof.sh
+  kill-guard-device:
+    command: bash kill-guard/run-device-proof.sh
