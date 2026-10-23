@@ -11,6 +11,12 @@ Its existing config shims and card behavior are unchanged.
 
 `merge-card gate|check|post [--judge <route>]` passes `--judge <route>` to the `done-done check` it runs, so a lane whose configured judge route is rate limited can name another one for that merge instead of waiting on done-done's fallback. Without the flag nothing changes: done-done checks the proof with its own configured judge.
 
+## The judge's account
+
+The judge is a claude caller. In a home with a worker account pool (`config/account-pool`), the check runs it on the account the pool picks: the pool's pick answer carries the account's profile folder and the login variables the pool sheds, so the check's env carries `CLAUDE_CONFIG_DIR=<that folder>` and those variables unset, and the judge never answers on the default login. The pick is a read: it never rests an account and never mutates the pool. One line names the account that ran.
+
+Without a pool, or with a pool that cannot answer, the ambient login is kept and nothing is said: a proof check does not refuse a merge over the pool. A pick that answers with anything but an absolute, existing profile folder is ignored, so a broken pool cannot point the judge at a stranger's folder.
+
 ## One card per PR
 
 The first card for a PR takes the PR's key (`merge-<owner>-<repo>-pull-<n>`). A post for a new head posts its card through `sign-off-axi post --kind evidence` under that key plus a 12-character head suffix, then archives (`sign-off-axi dismiss`) the PR's earlier live cards, so the board has one live card and the history stays under Archived. sign-off-axi takes evidence one post at a time and holds a key to its first message, so there is no `--from --replace` feed. A repeat post for a head adds nothing; a post for a head whose card was dismissed restores that card.
