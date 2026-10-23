@@ -92,6 +92,11 @@ PATH="$T/bin:$PATH" hook "$DEVICE_CALLER" 'adb -s lab-serial shell kill 43210'
 [ "$rc" -eq 2 ] && [[ "$err" == *"start time does not match"* ]] && ok "refused reused device pid" || no "reused device pid: $err"
 PATH="$T/bin:$PATH" hook "$DEVICE_CALLER" 'adb -s lab-serial shell sh -c "kill 43210"'
 [ "$rc" -eq 2 ] && ok "refused spoofed command text" || no "spoofed command text: $err"
+# own start through an adb that, like the real one, joins its shell arguments for the device shell (here the host).
+printf '#!/bin/sh\n[ "$1" = -s ] && shift 2; [ "$1" = shell ] && shift; exec sh -c "$*"\n' > "$T/bin/adb"
+(cd "$T/worktree" && PATH="$T/bin:$PATH" timeout 10 node "$T/home/.local/share/fm-kill-guard/guard.mjs" own start lab-serial -- sleep 300) && OWN=$(jq '.[-1].pid' "$T/worktree/.fm-kill-guard-device-pids.json") && PIDS+=("$OWN") \
+  && [ "$(cat "/proc/$OWN/comm" 2>/dev/null)" = sleep ] && ok "own start records a running device process" || no "own start"
+PATH="$T/bin:$PATH" allow "$DEVICE_CALLER" "adb -s lab-serial shell kill ${OWN:-0}"
 descends_from_test() { p=$1; while [ "$p" -gt 1 ]; do p=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null) || return 1; [ "$p" = "$$" ] && return 0; done; return 1; }
 detached "$ADDON"; REPARENTED=$DET; PIDS+=("$REPARENTED")
 ! descends_from_test "$REPARENTED" && ok "detached process was reparented" || no "detached process remains in caller's tree"
