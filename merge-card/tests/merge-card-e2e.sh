@@ -50,7 +50,7 @@ printf '%s\n' "$*" >>"$DD_LOG"
 # The env the check ran the judge with: the pool account's folder, and the login
 # variables the pool sheds, unset. Only the check is recorded: the version and help
 # probes and the signoff call are not the judge's.
-[ "${1:-}" = check ] && [ -n "${DD_ENV_LOG:-}" ] && printf 'dir=%s key=%s token=%s\n' "${CLAUDE_CONFIG_DIR:-}" "${ANTHROPIC_API_KEY:-}" "${ANTHROPIC_AUTH_TOKEN:-}" >>"$DD_ENV_LOG"
+[ "${1:-}" = check ] && [ "${2:-}" != --help ] && [ -n "${DD_ENV_LOG:-}" ] && printf 'dir=%s key=%s token=%s\n' "${CLAUDE_CONFIG_DIR:-}" "${ANTHROPIC_API_KEY:-}" "${ANTHROPIC_AUTH_TOKEN:-}" >>"$DD_ENV_LOG"
 case $1 in
   --version) case $MODE in older) echo 0.3.0 ;; *) echo 0.3.1 ;; esac; exit 0 ;;
 esac
@@ -115,6 +115,7 @@ cat > "$work/bin/pool-claude" <<'STUB' || exit 1
 #!/usr/bin/env bash
 [ "${1:-}" = pick ] || exit 1
 printf '%s\n' "$*" >>"$DD_POOL_LOG"
+[ "${POOL_FAIL:-0}" = 0 ] || { echo "quota reader unavailable" >&2; exit 1; }
 jq -n --arg id "${POOL_ID:-acct1}" --arg f "$POOL_FOLDER" '{ok: true, id: $id, set: {CLAUDE_CONFIG_DIR: $f}, unset: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]}'
 STUB
 
@@ -187,6 +188,9 @@ checks() { # checks <task-id> <evidence>: the task folder's Checks block
 # and the card carries the PNG.
 MODE=newer DD_LOG=$work/args.log SO_CAPTURE=$work/card-newer DD_ENV_LOG=$work/env.log DD_POOL_LOG=$work/pool.log
 export MODE DD_LOG SO_CAPTURE DD_ENV_LOG DD_POOL_LOG
+export POOL_FOLDER=$work/pool/profile
+mkdir -p "$home/config"
+printf 'command=%s\nstate=%s\n' "$work/bin/pool-claude" "$work/pool" >"$home/config/account-pool"
 checks newer shot.png && cp "$shot" "$home/data/newer/shot.png"
 : >"$DD_LOG"
 run_check_and_post newer
@@ -247,7 +251,7 @@ PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check pool "$wt" "$he
 is "pool: the check asks the pool for a claude account" "$(grep -c 'pick claude --json --state' "$DD_POOL_LOG")" 1
 is "pool: the judge runs on the picked account's folder" "$(cut -d' ' -f1 "$DD_ENV_LOG" | tail -n 1)" "dir=$POOL_FOLDER"
 is "pool: the pool's login variables are unset for it" "$(cut -d' ' -f2- "$DD_ENV_LOG" | tail -n 1)" "key= token="
-grep -q "pool account acct1: $POOL_FOLDER" "$work/pool-check.log" && ok "pool: the line names the account" || no "pool: the line names the account: $(cat "$work/pool-check.log")"
+grep -q "pool: Claude folder $POOL_FOLDER" "$work/pool-check.log" && ok "pool: the line names the account" || no "pool: the line names the account: $(cat "$work/pool-check.log")"
 is "pool: the verdict is still the check's" "$(jq -r .verdict "$home/data/pool/merge-card.json")" pass
 # Without a pool the ambient login stays: no pick, no folder, no unset.
 rm -f "$home/config/account-pool"
@@ -255,7 +259,16 @@ rm -f "$home/config/account-pool"
 : >"$DD_POOL_LOG"
 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check nopool "$wt" "$head_c" - >/dev/null 2>&1
 is "no pool: the pool is not asked" "$(wc -c <"$DD_POOL_LOG")" 0
-is "no pool: the ambient login stays" "$(cut -d' ' -f1 "$DD_ENV_LOG" | tail -n 1)" "dir=${CLAUDE_CONFIG_DIR:-}"
+is "no pool: the judge never starts" "$(wc -c <"$DD_ENV_LOG")" 0
+printf 'command=%s\nstate=%s\n' "$work/bin/pool-claude" "$work/pool" >"$home/config/account-pool"
+POOL_FAIL=1 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check pool "$wt" "$head_c" - >"$work/fallback.log" 2>&1
+is "reader failure: last good folder reaches judge" "$(cut -d' ' -f1 "$DD_ENV_LOG" | tail -n 1)" "dir=$POOL_FOLDER"
+grep -q 'last good pick age' "$work/fallback.log" && ok "fallback reports age" || no "fallback reports age"
+rm -f "$home/state/claude-tool-pick.json"
+: >"$DD_ENV_LOG"
+POOL_FAIL=1 PATH="$work/bin:$PATH" FM_HOME=$home "$here/../merge-card" check pool "$wt" "$head_c" - >"$work/no-cache.log" 2>&1
+is "reader failure without cache: judge never starts" "$(wc -c <"$DD_ENV_LOG")" 0
+grep -q 'quota reader unavailable' "$work/no-cache.log" && ok "failure reports cause" || no "failure reports cause"
 
 # A 0.3.0 done-done on PR 24's shape: the PR body names the PNG bare, the file
 # is in the task folder, the flag is never passed, and merge-card hands done-done

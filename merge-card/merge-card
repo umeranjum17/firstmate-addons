@@ -40,7 +40,7 @@
 # The done-done check runs as the pool's claude account when the home has one
 # (config/account-pool): the check's env carries that account's profile folder in
 # CLAUDE_CONFIG_DIR and the pool's login variables unset, so the judge never answers on
-# the default login. Without a pool the ambient login is kept, and the line says so.
+# the default login. Failed reads use a last good pick or report that no judge ran.
 # Needs done-done on PATH (0.3.1+ cites the task folder's evidence itself; an older one is
 # still covered), sign-off-axi, jq and gh.
 set -u
@@ -73,51 +73,14 @@ resolve_evidence() {
     else . end'
 }
 
-# The env a claude caller in this home must use so it runs on a pool account and not on
-# the default login. Filled by pool_claude_env; an empty array means the ambient login stays.
-POOL_CLAUDE_ENV=()
+# shellcheck source=account-pool/bin/fm-pool-claude-env.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/account-pool/bin/fm-pool-claude-env.sh"
 
-# pool_claude_env <config-dir>: ask the pool for a claude account and record the env that
-# runs the caller on it: CLAUDE_CONFIG_DIR=<the account's profile folder> and the login
-# variables the pool sheds, unset. The pool answers with folder paths only, so no secret
-# reaches the line. A home with no pool, or a pool that cannot answer, leaves the env
-# empty: the caller keeps the ambient login and says so, because a proof check is not the
-# place to refuse a merge.
-pool_claude_env() {
-  local config=$1
-  local file=$config/account-pool command=byokit-accounts state='' line out id folder shed var
-  POOL_CLAUDE_ENV=()
-  [ -f "$file" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    case $line in '' | '#'*) continue ;; esac
-    case $line in command=*) command=${line#command=} ;; state=*) state=${line#state=} ;; esac
-  done <"$file"
-  case $state in /*) ;; *) return 0 ;; esac
-  out=$("$command" pick claude --json --state "$state" 2>/dev/null) || return 0
-  id=$(printf '%s' "$out" | jq -r '.id // empty' 2>/dev/null)
-  folder=$(printf '%s' "$out" | jq -r '.set.CLAUDE_CONFIG_DIR // empty' 2>/dev/null)
-  shed=$(printf '%s' "$out" | jq -r 'if (.unset | type) == "array" then [.unset[] | select(type == "string" and test("^[A-Za-z_][A-Za-z0-9_]*$"))] | join(" ") else "" end' 2>/dev/null)
-  case $folder in /*) ;; *) return 0 ;; esac
-  [ -d "$folder" ] || return 0
-  for var in $shed; do POOL_CLAUDE_ENV+=(-u "$var"); done
-  POOL_CLAUDE_ENV+=("CLAUDE_CONFIG_DIR=$folder")
-  echo "merge-card: the claude caller runs on pool account ${id:-unnamed}: $folder"
-}
-
-# pool_env_run <worktree> <command> [args...]: run a command in the work tree with the
-# pool's claude env, so a claude caller answers on the pool's account. Without a pool the
-# command runs as it is, so a missing tool still says so in its own words.
+# The executable selects before capturing judge JSON, keeping diagnostics out of it.
 pool_env_run() {
   local wt=$1
   shift
-  (
-    cd "$wt" || exit 2
-    if [ ${#POOL_CLAUDE_ENV[@]} -gt 0 ]; then
-      env "${POOL_CLAUDE_ENV[@]}" "$@"
-    else
-      "$@"
-    fi
-  )
+  ( cd "$wt" && "$@" )
 }
 
 # check [--claim-id <id>] [--judge <route>] <task-id> <worktree|-> <head|-> <pr-url|->: run done-done, save and print the verdict.
@@ -142,8 +105,10 @@ check() {
     dd_v=$(done-done --version 2>/dev/null | head -n 1)
     # The judge is a claude caller: it takes its account from the pool pick, so a
     # rate-limited default login cannot answer for the merge.
-    pool_claude_env "$FM_HOME/config"
-    if done-done check --help 2>&1 | grep -q -- '--citation-base' ||
+    if ! fm_pool_claude_env; then
+      rc=2
+      out='pool: no usable account; judge was not started'
+    elif done-done check --help 2>&1 | grep -q -- '--citation-base' ||
        version_at_least "$dd_v" 0.3.1; then
       out=$(pool_env_run "$wt" done-done check --from "$src" --json --citation-base "$FM_HOME/data/$id" "${judge[@]}" "${claim_id[@]}" 2>&1) || rc=$?
     else
