@@ -56,12 +56,12 @@ is "the installed watcher reads the parked-homes lib beside it" \
   "$(cmp "$SRC/parked-homes/bin/fm-parked-homes-lib.sh" "$XDG_DATA_HOME/fm-quota-failover/parked-homes/bin/fm-parked-homes-lib.sh" && echo same)" same
 
 "$SRC/quota-failover/install.sh" --all "$M" >/dev/null 2>&1
-is "a rerun backs nothing up again" "$(ls "$A"/state/*.bak-* "$M"/state/*.bak-* 2>/dev/null | wc -l)" 1
+is "a rerun backs nothing up again" "$(find "$A/state" "$M/state" -name '*.bak-*' | wc -l)" 1
 if registered "$A"; then ok "a rerun keeps the trust"; else no "a rerun keeps the trust"; fi
 
 "$SRC/quota-failover/uninstall.sh" --all "$M" >/dev/null 2>&1
 is "uninstall retires every check and trust" \
-  "$(ls "$M"/state/quota-failover-watch.* "$A"/state/quota-failover-watch.check* 2>/dev/null | grep -v '\.bak-' | wc -l)" 0
+  "$(find "$M/state" "$A/state" -name 'quota-failover-watch.check*' ! -name '*.bak-*' | wc -l)" 0
 is "uninstall removes the installed copy" "$([ -e "$XDG_DATA_HOME/fm-quota-failover" ] && echo present || echo gone)" gone
 
 [ "$fails" -eq 0 ] || { echo "quota-failover install: $fails assertion(s) failed"; exit 1; }
