@@ -195,13 +195,13 @@ function Overview({ d, od, go }) {
   if (!q) return html`<div class="ov"><div class="none"><p>${od.err ? `Cannot load the overview: ${od.err}` : 'Loading the overview…'}</p></div></div>`
   const m = q.metrics, asks = d.asks, openCards = d.cards.filter(c => ACTIVE.includes(c.stage)), hist = q.lane_history
   const stk = openCards.filter(stuck).length, toLand = openCards.filter(c => c.stage === 'merge').length
-  const states = m.lane_states?.value, age = now() - ts(q.build_time)
+  const states = m.lane_states?.value
   const qr = q.queue_reasons || [], qOk = m.queue?.value != null, qTop = Math.max(1, ...qr.map(x => sum(x.by_home)))
   const flow = (mid, label, foot, c) => { const r = m[mid]; return html`<div class="ov-flow"><span>${label}</span>
     <b class="num">${r?.status === 'unknown' ? 'unknown' : `${r?.status === 'lower_bound' && mid === 'landed' ? '≥' : ''}${r?.value ?? '–'}`}</b><small>${foot}</small>
     <${Days} rows=${r?.daily} c=${c} label=${label}/></div>` }
   return html`<div class="ov">
-    <p class="ov-tot">${od.err ? html`<span class="bad">Refresh failed: ${od.err} · </span>` : ''}${age < 60 ? 'just updated' : `updated ${dur(age)} ago`}</p>
+    ${od.err ? html`<p class="ov-tot"><span class="bad">Refresh failed: ${od.err}</span></p>` : ''}
     <div class="ov-kpis">
       <${Kpi} name="Needs you" v=${asks == null ? '?' : asks.length} c=${asks?.length ? '--orange' : '--green'} href="#/needs" src=${m.asks?.source}/>
       <${Kpi} name="Stuck" v=${stk} c=${stk ? '--red' : '--green'} t=${trend(hist, 'stuck', stk)} good="down" src=${m.stuck?.source} onClick=${() => go({ view: 'board', tab: 'active', state: ['blocked', 'decision'], card: null })}/>
@@ -345,7 +345,7 @@ function App() {
       <div class="seg">${TABS.map(([t, n]) => html`<button aria-pressed=${r.tab === t} onClick=${() => go({ tab: t })}>${n === 'Landed today' ? 'Landed' : n}${count(t) != null ? html`<small class="num">${count(t)}</small>` : ''}</button>`)}</div>
       <${Chips} d=${d} r=${r} go=${go}/><${MobileKanban} d=${d} cards=${shown} r=${r} open=${opencard}/>` : body}
     <div class="dock"><nav>${[['tickets', IC_TICKET, 'Tickets'], ['board', IC.board, 'Board'], ['overview', IC.display, 'Metrics'], ['insights', IC_CHART, 'Insights'], ['needs', IC.inbox, 'Needs you']].map(([v, ic, n]) =>
-      html`<a href=${'#/' + v} aria-current=${r.view === v ? 'page' : null} >${I(ic, 20)}<span>${n}</span>${v === 'needs' && asks ? html`<span class="badge">${asks}</span>` : ''}</a>`)}</nav>
+      html`<a href=${'#/' + v} aria-current=${r.view === v ? 'page' : null}>${I(ic, 20)}<span>${n}</span>${v === 'needs' && asks ? html`<span class="badge">${asks}</span>` : ''}</a>`)}</nav>
       <button onClick=${() => setPal(true)} aria-label="Search">${I(IC.search, 20)}</button></div>${overlays}</div>`
   return html`<div class="app">
     <nav class="side">
