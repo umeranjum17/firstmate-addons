@@ -16,6 +16,9 @@ cat > "$w/registry.json" <<R
 R
 cat > "$w/bin/quota-axi" <<'S'
 #!/usr/bin/env bash
+if [ -f "$QDIR/full" ]; then
+  echo '{"providers":[{"windows":[{"id":"five_hour","percentRemaining":100},{"id":"seven_day","percentRemaining":100}]}]}'; exit 0
+fi
 case "$CLAUDE_CONFIG_DIR" in
 */codex) echo '{"providers":[{"provider":"codex","windows":[{"id":"five_hour","percentRemaining":60},{"id":"weekly","percentRemaining":10}]}]}' ;;
 */a1) [ ! -e "$QDIR/rate-limit" ] || { echo '{"providers":[{"windows":[],"state":{"error":"Claude quota endpoint rate limited"}}]}'; exit 1; }
@@ -50,6 +53,13 @@ is "every account failing: exit non-zero, cause recorded" "$rc|$(jq -r '.account
 REG=$w/missing.json run
 is "missing registry: named error" "$rc|${out%%:*}" "1|error"
 
+mkdir -p "$w/home/state/claude-accounts-rested"
+printf '%s\n' "$(($(date +%s) + 3600))" > "$w/home/state/claude-accounts-rested/found-claude"
+run
+is "quota view exposes an active rest for the dashboard" "$(jq -r '.accounts[0].rested_until > now' "$f")" true
+touch "$w/full"; run
+is "100/100 headroom is never displayed as rested" "$(jq -r 'all(.accounts[]; .rested_until == null)' "$f")" true
+mv "$w/full" "$w/full-used"
 PROVIDER=codex run --print
 is "Codex reads only its roster and normalizes its weekly window" "$rc|$(jq -r '.accounts[] | "\(.id) \(.five_hour.left)/\(.seven_day.left)"' "$w/home/state/codex-accounts.json")" "0|found-codex 60/10"
 

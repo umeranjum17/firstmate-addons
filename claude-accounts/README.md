@@ -22,7 +22,7 @@ Test: `bash claude-accounts/tests/claude-accounts.test.sh`.
 ## Automatic account choice for new workers
 
 `bin/claude-accounts-pick` is a `config/account-pool` command used by fm-spawn and relaunch.
-It spreads new Claude and Codex assignments in proportion to headroom; its header documents the weighting, recent-assignment window, locking and quota floor.
+It spreads new Claude and Codex assignments in proportion to headroom; its header documents the smooth weighting, recent-assignment window, locking, quota floor and quota-verified rest policy.
 Each provider uses its own registry accounts and `<provider>-accounts.json` reading, with `account-assignments.json` in the pool state folder shared by callers.
 The reader accepts `FM_ACCOUNTS_PROVIDER=codex` to refresh Codex quota, including its weekly window.
 `--prefer <id>` still requires an eligible account, running workers stay on their current account, and Pi remains ambient.

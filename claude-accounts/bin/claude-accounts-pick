@@ -2,8 +2,8 @@
 # claude-accounts-pick - config/account-pool's `command=` for a home that spreads new Claude workers over
 # every signed-in Claude account. fm-spawn runs `<command> pick <tool> --json [--prefer <id>] --state <dir>`
 # for each new worker; the answer names one existing profile folder for CLAUDE_CONFIG_DIR and the credential
-# variable names to unset (names only). Picks maximize runway / (recent assignments + 1), starting
-# with the most headroom and spreading subsequent launches proportionally within each provider.
+# variable names to unset (names only). Smooth weighted round robin picks the largest assignment
+# deficit (runway share * next assignment number - recent count) within each provider's best tier.
 # Assignments expire after FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS (default 300); flock serializes picks.
 # Runway is min(5h, 7d left). An account under FM_CLAUDE_ACCOUNTS_LOW percent (default 5)
 # is skipped, so new workers go to the other account when one runs low. A running worker is never moved:
@@ -17,8 +17,9 @@
 # whose last reading says it must sign in again is skipped, however much runway it shows, so a signed-out
 # profile never wins on a stale number. The pick fails only when the pool itself has nothing to offer: every
 # account rested, every known runway under the low mark, or no registry account with an existing folder.
-# `status <id> --json` names the tool and folder of one account and `rest <id> --json` sets it aside (5 h, or
-# until its 5h window resets) so the next pick moves to the other account; `unrest <id>` returns it. A rested
+# `status <id> --json` names the tool and folder of one account. `rest <id> --json` requires a quota
+# window at/below FM_ACCOUNT_POOL_REST_FLOOR (15%) and lasts until it resets; launch prompts cannot rest it.
+# A 100/100 reading invalidates a legacy rest. `unrest <id>` returns an account. A rested
 # account is never replaced by a paid fallback: with every account rested the pick refuses.
 # Env: FM_HOME (the home whose state holds the reading; optional - --state alone is enough),
 # FM_CLAUDE_ACCOUNTS_REGISTRY, FM_CLAUDE_ACCOUNTS_FRESH (seconds a reading is reused, 120).
@@ -52,9 +53,20 @@ if [ "$verb" != pick ]; then
     status) jq -cn --arg id "$id" --arg tool "$tool" --arg f "$(jq -r --arg id "$id" 'first(.accounts[]? | select(.id == $id) | .folder)' "$REGISTRY")" \
       '{ok: true, id: $id, tool: $tool, folder: $f}' ;;
     rest)
+      quota_dir=${FM_HOME:+$FM_HOME/state}; quota_dir=${quota_dir:-$state}
+      if [ -n "${FM_HOME:-}" ]; then
+        FM_ACCOUNTS_PROVIDER=$tool "$here/claude-accounts-quota.sh" >/dev/null || fail "cannot verify quota before resting $id"
+      fi
+      # Claude reports UTC offsets and fractional seconds; jq's parser requires whole-second Z.
+      until=$(jq -er --arg id "$id" --argjson floor "${FM_ACCOUNT_POOL_REST_FLOOR:-15}" --argjson now "$(date +%s)" '
+        select($now - .generated_at <= 120) | .accounts[] | select(.id == $id and .problem == null)
+        | [.five_hour, .seven_day] | map(select(.left != null and .left <= $floor) | .resets_at
+          | sub("[.][0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601)
+        | max | select(. > $now)' "$quota_dir/$tool-accounts.json") \
+        || fail "rest requires low quota with a future reset for $id; a launch prompt is not a limit"
       mkdir -p "$rested" || fail "cannot write the rested list in $rested"
-      echo $(($(date +%s) + ${FM_CLAUDE_ACCOUNTS_REST_SECONDS:-18000})) >"$rested/$id" || fail "cannot rest $id in $rested"
-      jq -cn --arg id "$id" '{ok: true, id: $id, rested: true}' ;;
+      echo "$until" >"$rested/$id" || fail "cannot rest $id in $rested"
+      jq -cn --arg id "$id" --argjson until "$until" '{ok: true, id: $id, rested: true, until: $until, reason: "low quota"}' ;;
     unrest) rm -f "$rested/$id"; jq -cn --arg id "$id" '{ok: true, id: $id, rested: false}' ;;
   esac
   exit 0
@@ -108,8 +120,13 @@ state=${state:-${FM_HOME:+$FM_HOME/state}}
 [ -n "$state" ] || fail "pick needs --state <dir> or FM_HOME to balance assignments"
 rested_dir=$state/$tool-accounts-rested
 rested_ids=$(for f in "$rested_dir"/*; do
-  [ -f "$f" ] && [ "$(cat "$f" 2>/dev/null)" -gt "$(date +%s)" ] 2>/dev/null && basename "$f"
-done | jq -Rsc 'split("\n") | map(select(. != ""))')
+  [ -f "$f" ] || continue
+  if jq -e --arg id "${f##*/}" 'any(.accounts[]?; .id == $id and .problem == null and .five_hour.left == 100 and .seven_day.left == 100)' <<<"$reading" >/dev/null; then
+    printf '0\n' >"$f" || fail "cannot expire the recovered account rest"
+  fi
+  expiry=$(cat "$f") || fail "cannot read account rest"
+  if [ "$expiry" -gt "$(date +%s)" ] 2>/dev/null; then basename "$f"; fi
+done | jq -Rsc 'split("\n") | map(select(. != ""))') || fail "cannot read or expire account rests"
 
 # The picker owns the counter, so all callers (spawn, relaunch, and tool judges) share it.
 mkdir -p "$state" || fail "cannot create assignment state in $state"
@@ -132,6 +149,7 @@ pick=$(jq -cn --arg prefer "$prefer" --arg tool "$tool" --argjson assignments "$
     --argjson max "${FM_CLAUDE_ACCOUNTS_STALE_MAX:-3600}" --argjson rested "$rested_ids" --argjson read "$reading" '
   ($read // {}) as $rd
   | def sign_in: test("sign-?in|log ?in|unauthenticated|not authenticated|no credentials"; "i");
+  def weight: [.runway, 1] | max;
   [ $roster[] as $r
     | (($rd.accounts // []) | map(select(.id == $r.id)) | first // {}) as $m
     | ($m.read_at // $rd.generated_at // 0) as $at
@@ -144,7 +162,9 @@ pick=$(jq -cn --arg prefer "$prefer" --arg tool "$tool" --argjson assignments "$
     | select(([.id] | inside($rested) | not) and ((($m.problem // "") | sign_in) | not))
     | select(.runway < 0 or .runway >= $low)
     | select($prefer == "" or $prefer == "next" or .id == $prefer)]
-  | sort_by(.tier, -(([.runway, 1] | max) / (.assigned + 1)), -.runway) | first // empty' --argjson roster "$roster")
+  | (map(.tier) | min) as $tier | map(select(.tier == $tier))
+  | (map(weight) | add) as $total | ((map(.assigned) | add) + 1) as $turn
+  | sort_by(.assigned - (weight * $turn / $total), -.runway) | first // empty' --argjson roster "$roster")
 [ -n "$pick" ] || fail "no ${tool/claude/Claude} account can take a worker${prefer:+ (asked for $prefer)}: each is resting, signed out, or under $low% left${read_err:+ (quota reading unavailable: $read_err)}"
 folder=$(jq -r '.folder' <<<"$pick")
 [ -d "$folder" ] || fail "the chosen $tool account's folder is missing"

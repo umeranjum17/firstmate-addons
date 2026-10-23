@@ -19,7 +19,7 @@ cat > "$w/bin/quota-axi" <<'S'
 #!/usr/bin/env bash
 [ ! -e "$QDIR/limit" ] || { echo '{"providers":[{"windows":[],"state":{"error":"rate limited"}}]}'; exit 1; }
 read -r h d < "$QDIR/$(basename "$CLAUDE_CONFIG_DIR").q" || exit 2
-echo "{\"providers\":[{\"windows\":[{\"id\":\"five_hour\",\"percentRemaining\":$h},{\"id\":\"seven_day\",\"percentRemaining\":$d}]}]}"
+echo "{\"providers\":[{\"windows\":[{\"id\":\"five_hour\",\"resetsAt\":\"$(jq -nr --argjson at "$(($(date +%s) + 3600))" '$at | todateiso8601')\",\"percentRemaining\":$h},{\"id\":\"seven_day\",\"percentRemaining\":$d}]}]}"
 S
 chmod +x "$w/bin/quota-axi"
 fails=0
@@ -54,10 +54,14 @@ cmd() { env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_HOME="$w/h
 q a1 "63 34"; q a2 "100 69"
 is "status names the tool of a pa_ account" "$(cmd status $A1 --json --state "$w/pool" | jq -r .tool)" claude
 is "status refuses an unknown id" "$(cmd status pa_nope --json --state "$w/pool" >/dev/null; echo $?)" 1
-is "rest sets the current account aside" "$(cmd rest $A2 --json --state "$w/pool" | jq -r .rested)" true
-pick claude next; is "next: the pick moves to the other account" "$rc|$(cut -f1 <<<"$out")" "0|$A1"
+is "a launch prompt cannot rest an account with headroom" "$(cmd rest $A2 --json --state "$w/pool" >/dev/null; echo $?)" 1
+q a2 "0 69"
+rest_answer=$(cmd rest $A2 --json --state "$w/pool")
+is "rest sets the current account aside" "$(jq -r .rested <<<"$rest_answer")" true
+is "rest ends at the quota reset, not a fixed five hours" "$(jq -r '.until - now | . > 3500 and . <= 3600' <<<"$rest_answer")" true
+q a2 "100 69"; pick claude next; is "next: the pick moves to the other account" "$rc|$(cut -f1 <<<"$out")" "0|$A1"
 pick claude $A2; is "an explicit id that is rested is refused" "$rc" 1
-cmd rest $A1 --json --state "$w/pool" >/dev/null; pick; is "every account rested: refused, no paid fallback" "$rc|$(grep -c 'no Claude account can take a worker' <<<"$out")" "1|1"
+q a1 "0 34"; cmd rest $A1 --json --state "$w/pool" >/dev/null; q a1 "63 34"; pick; is "every account rested: refused, no paid fallback" "$rc|$(grep -c 'no Claude account can take a worker' <<<"$out")" "1|1"
 cmd unrest $A1 --json --state "$w/pool" >/dev/null; cmd unrest $A2 --json --state "$w/pool" >/dev/null
 pick claude $A2; is "an explicit pa_ id resolves once unrested" "$rc|$(cut -f1 <<<"$out")" "0|$A2"
 
@@ -120,6 +124,17 @@ rm -f "$w/pool/account-assignments.json"
 for ((i=0; i<10; i++)); do cmd_nohome pick claude --json --state "$w/pool" | jq -r .id; done > "$w/picks"
 is "60:30:10 runway spreads ten consecutive workers 6:3:1" "$(awk -v a="$A1" -v b="$A2" '{n[$0]++} END {print n[a] ":" n[b] ":" n["third"]}' "$w/picks")" "6:3:1"
 is "first worker gets the most headroom" "$(head -n1 "$w/picks")" "$A1"
+reading 0 100 100 11 11
+rm -f "$w/pool/account-assignments.json"
+for ((i=0; i<6; i++)); do cmd_nohome pick claude --json --state "$w/pool" | jq -r .id; done > "$w/picks"
+is "100:11 headroom still spreads six spawns 5:1" "$(awk -v a="$A1" -v b="$A2" '{n[$0]++} END {print n[a]+0 ":" n[b]+0}' "$w/picks")" "5:1"
+reading 0 56 65 97 11
+jq '.accounts += [{id:"third",five_hour:{left:100},seven_day:{left:100}}]' "$w/pool/claude-accounts.json" > "$w/pool/reading.next"
+mv "$w/pool/reading.next" "$w/pool/claude-accounts.json"
+rm -f "$w/pool/account-assignments.json"
+is "a 100/100 account cannot be rested" "$(cmd_nohome rest third --json --state "$w/pool" >/dev/null; echo $?)" 1
+printf '%s\n' "$(($(date +%s) + 18000))" > "$w/pool/claude-accounts-rested/third"
+is "incident regression: a legacy rest cannot exclude 100/100 headroom" "$(cmd_nohome pick claude --json --state "$w/pool" | jq -r .id)" third
 jq -n --argjson now "$(date +%s)" '{generated_at:$now,accounts:[
   {id:"c1",five_hour:{left:75},seven_day:{left:75}},
   {id:"c2",five_hour:{left:25},seven_day:{left:25}}]}' > "$w/pool/codex-accounts.json"

@@ -15,6 +15,8 @@ SECONDS_MAX=${FM_CLAUDE_ACCOUNTS_SECONDS:-60}
 PROVIDER=${FM_ACCOUNTS_PROVIDER:-claude}
 case "$PROVIDER" in claude | codex) ;; *) echo "error: unsupported quota provider $PROVIDER" >&2; exit 1 ;; esac
 OUT=$FM_HOME/state/$PROVIDER-accounts.json
+REST_STATE=$(sed -n 's/^state=//p' "$FM_HOME/config/account-pool" 2>/dev/null | head -n 1)
+case "$REST_STATE" in /*) ;; *) REST_STATE=$FM_HOME/state ;; esac
 PRINT=0
 [ "${1:-}" = --print ] && PRINT=1
 for tool in jq quota-axi; do
@@ -28,7 +30,9 @@ mapfile -t ROWS < <(jq -r --arg provider "$PROVIDER" '.accounts[]? | select(.pro
 [ "${#ROWS[@]}" -gt 0 ] || { echo "error: no Claude account in $REGISTRY" >&2; exit 1; }
 
 read_one() { # id name folder -> one account JSON object
-  local id=$1 name=$2 folder=$3 raw err rc errf
+  local id=$1 name=$2 folder=$3 raw err rc errf rested
+  rested=$(cat "$REST_STATE/$PROVIDER-accounts-rested/$id" 2>/dev/null) || rested=0
+  case "$rested" in '' | *[!0-9]*) rested=0 ;; esac
   errf=$(mktemp "${TMPDIR:-/tmp}/claude-accounts.XXXXXX") || return 1
   raw=$(CLAUDE_CONFIG_DIR=$folder CODEX_HOME=$folder timeout "$SECONDS_MAX" quota-axi --provider "$PROVIDER" --profile-only --json 2>"$errf")
   rc=$?
@@ -36,7 +40,7 @@ read_one() { # id name folder -> one account JSON object
   rm -f "$errf"
   # A failed read (a vendor rate limit, say) keeps the account's last good windows, marked stale with their own read_at.
   jq -cn --arg id "$id" --arg name "${name:-default}" --arg folder "$folder" --arg raw "$raw" --arg err "$err" --argjson rc "$rc" \
-    --argjson now "$NOW" --argjson prev "$(jq -c --arg id "$id" '(.generated_at) as $g | [.accounts[]? | select(.id == $id and (.five_hour != null or .seven_day != null)) | . + {read_at: (.read_at // $g)}] | first // null' "$OUT" 2>/dev/null || echo null)" '
+    --argjson now "$NOW" --argjson rested "$rested" --argjson prev "$(jq -c --arg id "$id" '(.generated_at) as $g | [.accounts[]? | select(.id == $id and (.five_hour != null or .seven_day != null)) | . + {read_at: (.read_at // $g)}] | first // null' "$OUT" 2>/dev/null || echo null)" '
     def win($w): ([ $raw | fromjson? | (.providers[0]? // .) | .windows[]? | select(.id == $w or ($w == "seven_day" and .id == "weekly")) ] | first) as $x
       | if $x == null then null else {left: $x.percentRemaining, resets_at: $x.resetsAt} end;
     (win("five_hour")) as $h | (win("seven_day")) as $d
@@ -44,7 +48,8 @@ read_one() { # id name folder -> one account JSON object
     | (if $rc != 0 then (if $err != "" then $err else ($verr // "quota-axi exited \($rc)") end)
        elif $h == null and $d == null then ($verr // "no 5h or 7d window in the reading") else null end) as $problem
     | {id: $id, name: $name, folder: $folder, five_hour: $h, seven_day: $d, read_at: $now, problem: $problem, stale: false}
-    | if .problem != null and $prev != null then . + {five_hour: $prev.five_hour, seven_day: $prev.seven_day, read_at: $prev.read_at, stale: true} else . end'
+    | if .problem != null and $prev != null then . + {five_hour: $prev.five_hour, seven_day: $prev.seven_day, read_at: $prev.read_at, stale: true} else . end
+    | . + {rested_until: (if $rested > $now and (.five_hour.left != 100 or .seven_day.left != 100) then $rested else null end)}'
 }
 
 NOW=$(date +%s)
