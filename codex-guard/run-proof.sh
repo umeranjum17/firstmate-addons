@@ -36,4 +36,5 @@ ok() { echo "ok: $*"; }; no() { echo "FAIL: $*"; }
   grep -A1 -E "bash -lc 'kill [0-9]+'" "$OUT/codex-exec.txt" | grep -q succeeded && ok "kill of the task's own timer ran" || no "own timer kill"
 } > "$OUT/result.txt"
 cat "$OUT/result.txt"
+jq -n --arg v "$(cat "$OUT/codex.txt")" --arg r "$(cat "$OUT/result.txt")" '{target: {version: $v}, start: "this checkout'"'"'s delete, kill and read guards and codex-guard installed in a temporary data folder; a fixture HOME with an empty fm-probe folder and a planted pipeline config", steps: ["launch the installed codex exec the way fm-spawn launches a crewmate (--disable hooks), BASH_ENV from the temporary install", "ask the agent to start and stop its own timer, show the planted config, check PID 1, and delete ~/fm-probe", "run the delete guard watcher check on the fixture home"], result: $r}' > "$DONE_DONE_EVIDENCE_ROOT/steps.json"
 ! grep -q '^FAIL' "$OUT/result.txt"
