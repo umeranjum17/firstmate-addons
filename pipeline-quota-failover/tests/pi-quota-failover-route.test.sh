@@ -84,7 +84,8 @@ cat >"$stub/pool" <<'STUB'
 printf '%s\n' "$*" >>"$STUB_POOL_LOG"
 all="$*" state=${all##*--state }
 case $1 in
-  rest) mkdir -p "$state/rested" && touch "$state/rested/$2" && echo '{"ok":true}' ;;
+  rest) [ -z "${STUB_REST_REFUSE:-}" ] || { echo 'error: rest requires low quota with a future reset' >&2; exit 1; }
+        mkdir -p "$state/rested" && touch "$state/rested/$2" && echo '{"ok":true}' ;;
   pick) for id in a b; do [ -e "$state/rested/$id" ] && continue
           printf '{"ok":true,"id":"%s","set":{"CLAUDE_CONFIG_DIR":"%s"},"unset":["ANTHROPIC_API_KEY"]}\n' "$id" "$STUB_POOL_DIR/$id"; exit 0; done
         echo '{"ok":false,"reason":"every Claude account is resting"}'; exit 1 ;;
@@ -157,12 +158,22 @@ is "account a is rested in the pool" "$(grep -c '^rest a ' "$work/pool.log")" "1
 log_has "the move is logged" "quota-error on account a .*same route on account b"
 is "no quota marker for the route" "$(find "$work/state" -path "*pi-quota-failover-dead/*" | wc -l)" "0"
 
+# 6b. The pool refuses the rest (its own reading does not show the account low) and picks the same account again:
+#     the call ends, but no route marker is written, so the next call goes back to the pool's pick.
+rm -rf "$work/poolstate/rested"; : >"$log"; : >"$STUB_ACCOUNTS"
+OUT=$(printf '%s' "$prompt" | STUB_LIMITED=a STUB_REST_REFUSE=1 PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool \
+  "$wrapper" --model "$route" --mode json --no-session 2>"$work/err6b")
+is "a refused rest with no other pick fails the call" "$?" "1"
+log_has "the pool's refusal is logged" "did not rest account a: error: rest requires low quota"
+is "and no route marker is written" "$(find "$work/state" -path "*pi-quota-failover-dead/*" | wc -l)" "0"
+
 # 7. Every account answers a limit: each is rested, the call ends with the terminal "quota exhausted", and nothing
 #    runs on the default login. The next call finds no account and runs nothing.
 rm -rf "$work/poolstate/rested"; : >"$log"; : >"$STUB_ACCOUNTS"
 OUT=$(printf '%s' "$prompt" | STUB_LIMITED='a b' PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool "$wrapper" --model "$route" --mode json --no-session 2>"$work/err7")
 is "every account limited fails" "$?" "1"
 log_has "the chain ends quota exhausted" "quota exhausted on every model"
+is "an account limit writes no route marker" "$(find "$work/state" -path "*pi-quota-failover-dead/*" | wc -l)" "0"
 is "both accounts tried, never the default login" "$(sed 's|.*/||' "$STUB_ACCOUNTS" | paste -sd, -)" "a,b"
 rm -rf "$work/state/pi-quota-failover-dead"; : >"$STUB_ACCOUNTS"
 OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool "$wrapper" --model "$route" --mode json --no-session 2>"$work/err8")

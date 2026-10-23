@@ -443,10 +443,12 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
     exit "$rc"
   fi
   # A Claude limit on a pool account is that account's: rest it and run the same route on the next pick. Each rest
-  # takes one account off the pick, so this ends when the pool has none left; only then is the route marked dead.
+  # takes one account off the pick, so this ends when the pool has none left. The pool, not a route marker, decides
+  # which account the next call runs on, so an account limit never marks the route dead for every account.
   if [ "$quota" = 1 ] && [ -n "$pool_id" ] && [[ $model = claude-bridge/* ]]; then
-    old=$pool_id
-    timeout 60 "$pool_cmd" rest "$old" --json --state "$pool_state" >/dev/null 2>&1 || log_line "the pool could not rest account $old"
+    old=$pool_id quota=2
+    why=$(timeout 60 "$pool_cmd" rest "$old" --json --state "$pool_state" 2>&1 >/dev/null) ||
+      log_line "the pool did not rest account $old: ${why:-no answer}"
     if pool_use && [ "$pool_id" != "$old" ]; then
       log_line "model=$model quota-error on account $old in $((t1 - t0))ms ($detail); same route on account $pool_id"
       mapfile -t args < <(printf '%s\n' "${args[@]}" | drop_session)
@@ -456,8 +458,8 @@ for ((attempt = 0; attempt < ${#order[@]}; attempt++)); do
     pool_id=''
   fi
   # Only a real quota error marks the route dead; a stall moves on for this call alone.
-  if [ "$quota" = 1 ]; then
-    mark_dead "$model"
+  if [ "$quota" != 0 ]; then
+    [ "$quota" = 2 ] || mark_dead "$model"
     kind="quota-error"
   elif [ "$rfail" = 1 ]; then
     kind="route-failure"
