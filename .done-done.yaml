@@ -31,3 +31,5 @@ journeys:
     command: bash account-pool/run-tool-proof.sh
   guards-pool-accounts:
     command: bash read-guard/run-pool-proof.sh
+  codex-guard-live:
+    command: bash codex-guard/run-proof.sh
