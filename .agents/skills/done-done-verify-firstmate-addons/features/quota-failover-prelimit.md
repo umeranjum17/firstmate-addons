@@ -6,7 +6,7 @@ A worker on a pool account that is about to run out moves to another account of 
 
 ## Drive
 
-Run `bash quota-failover/tests/quota-failover-e2e.sh` from the repository root; passes 11 and 12 use a fixture home with `claude-accounts.json` and `codex-accounts.json` readings and a stubbed busy source. For a live check, in a guarded Herdr lab home with this checkout's `claude-accounts` installed, spawn one Haiku worker with `--account <a real account at or below 15%>`, let it write a `working` status and end its turn, then run `quota-failover/quota-failover <lab home>` once.
+Run `bash quota-failover/tests/quota-failover-e2e.sh` from the repository root; passes 11 to 13 use a fixture home with `claude-accounts.json` and `codex-accounts.json` readings and a stubbed busy source. For a live check, in a guarded Herdr lab home with this checkout's `claude-accounts` installed, spawn one Haiku worker with `--account <a real account at or below 15%>`, let it write a `working` status and end its turn, then run `quota-failover/quota-failover <lab home>` once.
 
 ## Evidence
 

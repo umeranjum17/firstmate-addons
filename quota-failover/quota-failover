@@ -333,7 +333,13 @@ prelimit() {
   if out=$("$BIN/fm-control.sh" "$id" relaunch --account next --note-file "$notefile" 2>&1); then
     log "$id: moved idle $h $m off low account $acct ($left) to the next $h account"
   else
-    log "$id: pre-limit move off $acct ($left) refused: $(grep -m1 '^error: ' <<<"$out" || tail -n 1 <<<"$out")"
+    out=$(grep -m1 '^error: ' <<<"$out" || tail -n 1 <<<"$out")
+    # A relaunch can fail after it replaced the incarnation; say what the meta now records.
+    if [ "$(fm_meta_get "$meta" spawn_gen)" != "$gen" ]; then
+      log "$id: moved idle $h $m off low account $acct ($left) to account $(fm_meta_get "$meta" account), but the relaunch reported: $out"
+    else
+      log "$id: pre-limit move off $acct ($left) refused: $out"
+    fi
   fi
   rm -f "$notefile"
 }

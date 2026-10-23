@@ -15,7 +15,7 @@
 # incarnation, while a pool rest that fails still wakes the home, once; a
 # Claude worker whose account folder answers a limit moves on that account's
 # own reading, a pool worker wedged with a clean screen still loses its route
-# to the pinned probe's verdict. Passes 11 and 12 cover the pre-limit move off a
+# to the pinned probe's verdict. Passes 11 to 13 cover the pre-limit move off a
 # low account. Needs bash, jq, flock, timeout, sed and stat
 # on PATH; no real tool or home is touched.
 set -u
@@ -66,6 +66,8 @@ printf '%s\n' "$*" >>"$FM_HOME/state/fm-control.log"
 id=${1:-}
 # d1's pool has no next account ready, as fm-control answers after its rest.
 [ "$id $3 $4" != "d1 --account next" ] || { echo "error: config/account-pool cannot start a claude worker: no account is ready"; exit 1; }
+# p6's relaunch replaces the incarnation, then fails a later launch step.
+[ "$id $3 $4" != "p6 --account next" ] || { printf 'spawn_gen=s1.p6\naccount=nextacct\n' >>"$FM_HOME/state/p6.meta"; echo "error: launch step failed"; exit 1; }
 rm -f "$FM_HOME/state/$id.screen"
 date +%s >"$FM_HOME/state/$id.status"
 #--- bin/opencode
@@ -308,6 +310,11 @@ reading claude "$((now - 4000))" "lowacct 90 3"
 prelim p5 claude claude-opus-4-8 lowacct
 run
 count "pass12: a stale reading moves nobody" "$ctl" '^p5 ' 0
+reading claude "$(date +%s)" "lowacct 90 3"
+prelim p6 claude claude-opus-4-8 lowacct
+run
+has "pass13: a relaunch that fails after the swap reports the account it moved to" "$log" \
+  'p6: moved idle claude claude-opus-4-8 off low account lowacct (90% 5h, 3% week) to account nextacct, but the relaunch reported: error: launch step failed'
 
 if [ "$fails" -eq 0 ]; then
   echo "quota-failover e2e: all assertions held"
