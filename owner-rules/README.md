@@ -49,6 +49,7 @@ Existing homes need no reinstall when their add-on checkout is updated: the repo
 Homes without the marker enable it with `install.sh <fm-home>`; the report helper still needs the existing status-wait-check fork hook.
 Run `bash tests/no-lavish.test.sh` from this directory for the executable contract, note hook, and real sign-off board journey.
 Set `FM_TEST_FORK=<Firstmate checkout>` to also prove the real secondmate helper refuses before writing status; `FM_TEST_KEEP=1` preserves isolated fixtures for diagnosis.
+Capture the real commands and their outputs with `FM_PROOF_FORK=<Firstmate checkout> done-done run owner-rules-publication`, then check its `publication.txt` with done-done.
 
 ## Leads skill (slice 3)
 
