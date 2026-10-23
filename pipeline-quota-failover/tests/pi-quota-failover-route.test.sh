@@ -3,13 +3,15 @@
 # quota-axi in a throwaway HOME, with the exact argv shape no-mistakes builds
 # (--model <m> --mode json --no-session, prompt on stdin). It pins the
 # persisted pipeline route:
-#   - the default chain is the one route the no-mistakes config holds, the
-#     OpenRouter DeepSeek floor route;
+#   - the default chain is one route, Claude Haiku through claude-bridge;
 #   - a call pinned to that route runs it, and a call pinned to a model outside
-#     the chain runs the chain route and never the pinned model, so the
-#     config's route is the route that runs;
+#     the chain runs the chain route and never the pinned model;
 #   - an openrouter/* route takes the deepseek idle limit (300 s by default),
-#     not the short generic one, so a slow answer is not killed.
+#     not the short generic one, so a slow answer is not killed;
+#   - with an account pool, a bridge call runs on the pool's pick, a Claude
+#     limit rests that account and the same route answers on the next one, and
+#     with every account rested the call ends "quota exhausted" without ever
+#     running on the default login.
 # Nothing real is called: no pi, no network, no config. Needs bash, jq,
 # timeout and pgrep.
 set -u
@@ -18,9 +20,9 @@ here=$(cd "$(dirname "$0")" && pwd) || exit 1
 wrapper=$here/../pi-quota-failover
 [ -f "$wrapper" ] || { echo "not ok - $wrapper is missing"; exit 1; }
 
-# The persisted pipeline route: the no-mistakes config's agent_config.pi.model
-# and the wrapper's default chain are the same one route.
-route=openrouter/deepseek/deepseek-v4.1-flash-1017:floor
+# The pipeline route: Claude Haiku through claude-bridge, subscription accounts only.
+route=claude-bridge/claude-haiku-5-5
+or=openrouter/deepseek/deepseek-v4.1-flash-1017:floor
 
 work=$(mktemp -d) || exit 1
 trap 'rm -rf "$work"' EXIT
@@ -50,7 +52,12 @@ for a in "$@"; do
   prev=$a
 done
 [ "$model" = "${STUB_SILENT:-}" ] && { sleep 600; exit 0; }
+[ "$1" = --help ] || printf '%s\n' "${CLAUDE_CONFIG_DIR:-default-login}" >>"$STUB_ACCOUNTS"
 printf '%s\n' '{"type":"session","id":"s-1"}'
+case " ${STUB_LIMITED:-} " in *" ${CLAUDE_CONFIG_DIR##*/} "*)
+  printf '%s\n' '{"type":"message_end","stopReason":"error","errorMessage":"Claude rate limit (five_hour) resets in 3h: You are out of usage"}'
+  exit 0 ;;
+esac
 printf '%s\n' "{\"type\":\"message_end\",\"role\":\"assistant\",\"model\":\"$model\",\"content\":\"PONG\"}"
 exit 0
 STUB
@@ -71,7 +78,23 @@ printf '{"providers":[{"provider":"%s","quotaSemantics":{"effectiveAvailability"
 STUB
 chmod +x "$stub/quota-axi"
 
-export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi"
+# The stub pool (config/account-pool's command): accounts a then b, each a folder; a rested account is skipped.
+cat >"$stub/pool" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$STUB_POOL_LOG"
+all="$*" state=${all##*--state }
+case $1 in
+  rest) mkdir -p "$state/rested" && touch "$state/rested/$2" && echo '{"ok":true}' ;;
+  pick) for id in a b; do [ -e "$state/rested/$id" ] && continue
+          printf '{"ok":true,"id":"%s","set":{"CLAUDE_CONFIG_DIR":"%s"},"unset":["ANTHROPIC_API_KEY"]}\n' "$id" "$STUB_POOL_DIR/$id"; exit 0; done
+        echo '{"ok":false,"reason":"every Claude account is resting"}'; exit 1 ;;
+esac
+STUB
+chmod +x "$stub/pool"
+mkdir -p "$work/pool/a" "$work/pool/b" "$work/poolstate"
+printf 'command=%s\nstate=%s\n' "$stub/pool" "$work/poolstate" >"$work/account-pool"
+
+export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi" STUB_ACCOUNTS=$work/accounts STUB_POOL_LOG=$work/pool.log STUB_POOL_DIR=$work/pool
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
 export HOME="$home" XDG_STATE_HOME="$work/state"
 PATH="$stub:$PATH"
@@ -81,7 +104,7 @@ export PI_QUOTA_FAILOVER_PROBE=0
 prompt='Reply with the single word PONG.'
 
 # 1. The default chain is the persisted pipeline route, one route and only it.
-is "default chain is the OpenRouter DeepSeek floor route" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" "$route"
+is "default chain is Claude Haiku through claude-bridge" "$(PI_QUOTA_FAILOVER_PRINT_CHAIN=1 "$wrapper" </dev/null)" "$route"
 
 # 2. A call pinned to the config's route runs that route.
 : >"$STUB_ARGV"
@@ -90,7 +113,7 @@ OUT=$(printf '%s' "$prompt" | env -u PI_QUOTA_FAILOVER_CHAIN "$wrapper" --model 
 is "call on the config's route exits 0" "$?" "0"
 out_has "the config's route answers" "\"model\":\"$route\""
 is "one pi call" "$(wc -l <"$STUB_ARGV")" "1"
-is "quota-axi asked for the route's provider" "$(grep -c -- '--provider openrouter ' "$STUB_QUOTA_LOG")" "1"
+is "quota-axi asked for the route's provider" "$(grep -c -- '--provider claude-bridge ' "$STUB_QUOTA_LOG")" "1"
 if grep -q 'skipped' "$log" 2>/dev/null; then no "the route was skipped by the quota pre-check"; else ok "the route is not skipped by the quota pre-check"; fi
 
 # 3. A call pinned to a model outside the chain runs the chain route and never
@@ -106,8 +129,8 @@ is "the pinned model never runs" "$(grep -c 'openai-codex' "$STUB_ARGV")" "0"
 #    own 5 s limit, then the next chain route answers the same call.
 : >"$log"
 : >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | STUB_SILENT="$route" PI_QUOTA_FAILOVER_IDLE_SECS=1 PI_QUOTA_FAILOVER_DEEPSEEK_IDLE_SECS=5 \
-  PI_QUOTA_FAILOVER_CHAIN="$route claude-bridge/claude-haiku-5-5" "$wrapper" --model "$route" --mode json --no-session 2>"$work/err4")
+OUT=$(printf '%s' "$prompt" | STUB_SILENT="$or" PI_QUOTA_FAILOVER_IDLE_SECS=1 PI_QUOTA_FAILOVER_DEEPSEEK_IDLE_SECS=5 \
+  PI_QUOTA_FAILOVER_CHAIN="$or $route" "$wrapper" --model "$or" --mode json --no-session 2>"$work/err4")
 is "silent openrouter route exits 0" "$?" "0"
 out_has "the next chain route answers" '"model":"claude-bridge/claude-haiku-5-5"'
 log_has "the openrouter route is killed by its own limit" "no output for 5s"
@@ -117,10 +140,35 @@ if grep -q 'no output for 1s' "$log"; then no "the openrouter route was killed b
 #    the route's own and not a fixed number.
 : >"$log"
 : >"$STUB_ARGV"
-OUT=$(printf '%s' "$prompt" | STUB_SILENT="$route" PI_QUOTA_FAILOVER_IDLE_SECS=1 PI_QUOTA_FAILOVER_DEEPSEEK_IDLE_SECS=1 \
-  PI_QUOTA_FAILOVER_CHAIN="$route claude-bridge/claude-haiku-5-5" "$wrapper" --model "$route" --mode json --no-session 2>"$work/err5")
+OUT=$(printf '%s' "$prompt" | STUB_SILENT="$or" PI_QUOTA_FAILOVER_IDLE_SECS=1 PI_QUOTA_FAILOVER_DEEPSEEK_IDLE_SECS=1 \
+  PI_QUOTA_FAILOVER_CHAIN="$or $route" "$wrapper" --model "$or" --mode json --no-session 2>"$work/err5")
 is "silent openrouter route under a 1 s own limit exits 0" "$?" "0"
 log_has "the openrouter route is killed by the 1 s own limit" "no output for 1s"
+
+# 6. With an account pool, the bridge call runs on the pool's pick; account a answers a Claude limit, so a is rested
+#    and the same route answers on account b in the same call, with no quota marker for the route.
+: >"$log"; : >"$STUB_ARGV"; : >"$STUB_ACCOUNTS"
+OUT=$(printf '%s' "$prompt" | STUB_LIMITED=a PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool ANTHROPIC_API_KEY=x \
+  "$wrapper" --model "$route" --mode json --no-session 2>"$work/err6")
+is "a limit on one account still answers" "$?" "0"
+out_has "the same route answers" "\"model\":\"$route\""
+is "first account a, then b, never the default login" "$(sed 's|.*/||' "$STUB_ACCOUNTS" | paste -sd, -)" "a,b"
+is "account a is rested in the pool" "$(grep -c '^rest a ' "$work/pool.log")" "1"
+log_has "the move is logged" "quota-error on account a .*same route on account b"
+is "no quota marker for the route" "$(find "$work/state" -path "*pi-quota-failover-dead/*" | wc -l)" "0"
+
+# 7. Every account answers a limit: each is rested, the call ends with the terminal "quota exhausted", and nothing
+#    runs on the default login. The next call finds no account and runs nothing.
+rm -rf "$work/poolstate/rested"; : >"$log"; : >"$STUB_ACCOUNTS"
+OUT=$(printf '%s' "$prompt" | STUB_LIMITED='a b' PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool "$wrapper" --model "$route" --mode json --no-session 2>"$work/err7")
+is "every account limited fails" "$?" "1"
+log_has "the chain ends quota exhausted" "quota exhausted on every model"
+is "both accounts tried, never the default login" "$(sed 's|.*/||' "$STUB_ACCOUNTS" | paste -sd, -)" "a,b"
+rm -rf "$work/state/pi-quota-failover-dead"; : >"$STUB_ACCOUNTS"
+OUT=$(printf '%s' "$prompt" | PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool "$wrapper" --model "$route" --mode json --no-session 2>"$work/err8")
+is "with every account rested the call fails" "$?" "1"
+is "and runs nothing, not even on the default login" "$(wc -l <"$STUB_ACCOUNTS")" "0"
+log_has "the pool's reason is logged" "every Claude account is resting"
 
 echo
 if [ "$fails" = 0 ]; then echo "all tests passed"; else echo "$fails test(s) failed"; exit 1; fi
