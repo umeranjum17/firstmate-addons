@@ -17,6 +17,7 @@ R
 cat > "$w/bin/quota-axi" <<'S'
 #!/usr/bin/env bash
 case "$CLAUDE_CONFIG_DIR" in
+*/codex) echo '{"providers":[{"provider":"codex","windows":[{"id":"five_hour","percentRemaining":60},{"id":"weekly","percentRemaining":10}]}]}' ;;
 */a1) [ ! -e "$QDIR/rate-limit" ] || { echo '{"providers":[{"windows":[],"state":{"error":"Claude quota endpoint rate limited"}}]}'; exit 1; }
   echo '{"providers":[{"provider":"claude","windows":[{"id":"five_hour","percentRemaining":63,"resetsAt":"2026-10-21T08:00:00+00:00"},{"id":"seven_day","percentRemaining":34,"resetsAt":"2026-10-26T12:00:00+00:00"},{"id":"model:fable","percentRemaining":100}]}]}' ;;
 */a2) echo '{"providers":[{"provider":"claude","windows":[{"id":"five_hour","percentRemaining":100},{"id":"seven_day","percentRemaining":69,"resetsAt":"2026-10-22T07:00:00+00:00"}]}]}' ;;
@@ -26,7 +27,7 @@ S
 chmod +x "$w/bin/quota-axi"
 fails=0
 is() { if [ "$2" = "$3" ]; then echo "ok - $1"; else echo "not ok - $1: got [$2], want [$3]"; fails=$((fails + 1)); fi; }
-run() { out=$(env -i QDIR="$w" PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" FM_HOME="$w/home" FM_CLAUDE_ACCOUNTS_REGISTRY="${REG:-$w/registry.json}" bash "$here/../bin/claude-accounts-quota.sh" "$@" 2>&1); rc=$?; }
+run() { out=$(env -i QDIR="$w" PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" FM_HOME="$w/home" FM_ACCOUNTS_PROVIDER="${PROVIDER:-claude}" FM_CLAUDE_ACCOUNTS_REGISTRY="${REG:-$w/registry.json}" bash "$here/../bin/claude-accounts-quota.sh" "$@" 2>&1); rc=$?; }
 f=$w/home/state/claude-accounts.json
 
 run --print
@@ -48,6 +49,9 @@ REG=$w/only-bad.json run
 is "every account failing: exit non-zero, cause recorded" "$rc|$(jq -r '.accounts[0].problem' "$f")" "1|error: not signed in"
 REG=$w/missing.json run
 is "missing registry: named error" "$rc|${out%%:*}" "1|error"
+
+PROVIDER=codex run --print
+is "Codex reads only its roster and normalizes its weekly window" "$rc|$(jq -r '.accounts[] | "\(.id) \(.five_hour.left)/\(.seven_day.left)"' "$w/home/state/codex-accounts.json")" "0|found-codex 60/10"
 
 [ "$fails" -eq 0 ] || { echo "$fails failed"; exit 1; }
 echo "all passed"

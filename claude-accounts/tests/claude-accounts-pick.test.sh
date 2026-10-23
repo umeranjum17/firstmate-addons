@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # claude-accounts-pick: drive the account-pool add-on's own fm_account_pool_select (what fm-spawn calls)
 # with config/account-pool pointing at the chooser, a fixture muxr registry and a stub quota-axi whose
-# readings change per case. New workers go to the account with the most runway and switch when one runs low.
+# readings change per case. New workers spread by runway and skip an account when it runs low.
 set -u
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 addons=$(cd "$here/../.." && pwd) || exit 1
@@ -25,6 +25,7 @@ chmod +x "$w/bin/quota-axi"
 fails=0
 is() { if [ "$2" = "$3" ]; then echo "ok - $1"; else echo "not ok - $1: got [$2], want [$3]"; fails=$((fails + 1)); fi; }
 pick() { # [tool] [want]: sets out and rc from the pool pick
+  rm -f "$w/pool/account-assignments.json" # Independent election for each existing case.
   # shellcheck disable=SC2016
   out=$(env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_HOME="$w/home" FM_CLAUDE_ACCOUNTS_REGISTRY="$w/registry.json" \
     FM_CLAUDE_ACCOUNTS_FRESH=0 CODEX_HOME="$w/other" bash -c 'fm_run_timed() { shift; "$@"; }; . "$1/account-pool/bin/fm-account-pool-lib.sh"; shift; fm_account_pool_select "$@"' _ "$addons" "${1:-claude}" "$w/home/config" "${2:-}" 2>&1); rc=$?
@@ -49,7 +50,7 @@ pick codex; is "other tools keep their ambient default" "$rc|$(cut -f1,3 <<<"$ou
 # then picks again; the rested account is skipped, an explicit id is honoured, and nothing falls back to paid use.
 pool="$addons/claude-accounts/bin/claude-accounts-pick"
 A1=pa_536c925c8580938938 A2=pa_2f1d0a9b7c3e5d4a61
-cmd() { env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_HOME="$w/home" FM_CLAUDE_ACCOUNTS_REGISTRY="$w/registry.json" FM_CLAUDE_ACCOUNTS_FRESH=0 "$pool" "$@" 2>&1; }
+cmd() { env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_HOME="$w/home" FM_CLAUDE_ACCOUNTS_REGISTRY="$w/registry.json" FM_CLAUDE_ACCOUNTS_FRESH=0 FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS="${FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS:-300}" "$pool" "$@" 2>&1; }
 q a1 "63 34"; q a2 "100 69"
 is "status names the tool of a pa_ account" "$(cmd status $A1 --json --state "$w/pool" | jq -r .tool)" claude
 is "status refuses an unknown id" "$(cmd status pa_nope --json --state "$w/pool" >/dev/null; echo $?)" 1
@@ -70,10 +71,10 @@ reading() { # age_s five1 seven1 five2 seven2 [problem2]: the pool's own last go
     --argjson h1 "$2" --argjson d1 "$3" --argjson h2 "$4" --argjson d2 "$5" \
     '{schema: 1, generated_at: $at, accounts: [
       {id: $a, name: "One", folder: $f1, five_hour: {left: $h1}, seven_day: {left: $d1}, read_at: $at, problem: null, stale: false},
-      {id: $b, name: "Two", folder: $f2, five_hour: {left: $h2}, seven_day: {left: $d2}, read_at: $at, problem: $p2, stale: ($p2 != null)}]}' \
+      {id: $b, name: "Two", folder: $f2, five_hour: {left: $h2}, seven_day: {left: $d2}, read_at: $at, problem: (if $p2 == "null" then null else $p2 end), stale: ($p2 != "null")}]}' \
     > "$w/pool/claude-accounts.json"
 }
-cmd_nohome() { env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_CLAUDE_ACCOUNTS_REGISTRY="$w/registry.json" FM_CLAUDE_ACCOUNTS_FRESH=0 "$pool" "$@" 2>&1; }
+cmd_nohome() { env -i PATH="$w/bin:$PATH" HOME="$w" TMPDIR="$w" QDIR="$w" FM_CLAUDE_ACCOUNTS_REGISTRY="$w/registry.json" FM_CLAUDE_ACCOUNTS_FRESH=0 FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS="${FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS:-300}" "$pool" "$@" 2>&1; }
 rm -f "$w/home/state/claude-accounts.json"
 reading 600 90 95 99 1
 out=$(cmd_nohome pick claude --json --state "$w/pool"); rc=$?
@@ -103,6 +104,34 @@ rm -f "$w/home/config/account-pool"
 printf 'state=/x\ncommand=/bin/other\n' > "$w/home/config/account-pool"
 "$addons/claude-accounts/install.sh" "$w/home" >/dev/null 2>&1; is "install refuses another pool file" "$?" 1
 "$addons/claude-accounts/uninstall.sh" "$w/home" >/dev/null 2>&1; is "uninstall leaves another pool file" "$?|$(grep -c other "$w/home/config/account-pool")" "1|1"
+
+# Repeated selections through the public pool contract must balance, not elect the same winner.
+mkdir -p "$w/a3" "$w/c1" "$w/c2"
+jq --arg w "$w" '.accounts += [
+  {id:"third",provider:"claude",name:"Umer",folder:($w+"/a3")},
+  {id:"c1",provider:"codex",name:"Umer",folder:($w+"/c1")},
+  {id:"c2",provider:"codex",name:"Umer",folder:($w+"/c2")}]' "$w/registry.json" > "$w/registry.next"
+mv "$w/registry.next" "$w/registry.json"
+reading 0 60 60 30 30
+jq --argjson now "$(date +%s)" '.accounts += [{id:"third",read_at:$now,five_hour:{left:10},seven_day:{left:10}}]' \
+  "$w/pool/claude-accounts.json" > "$w/pool/reading.next"
+mv "$w/pool/reading.next" "$w/pool/claude-accounts.json"
+rm -f "$w/pool/account-assignments.json"
+for ((i=0; i<10; i++)); do cmd_nohome pick claude --json --state "$w/pool" | jq -r .id; done > "$w/picks"
+is "60:30:10 runway spreads ten consecutive workers 6:3:1" "$(awk -v a="$A1" -v b="$A2" '{n[$0]++} END {print n[a] ":" n[b] ":" n["third"]}' "$w/picks")" "6:3:1"
+is "first worker gets the most headroom" "$(head -n1 "$w/picks")" "$A1"
+jq -n --argjson now "$(date +%s)" '{generated_at:$now,accounts:[
+  {id:"c1",five_hour:{left:75},seven_day:{left:75}},
+  {id:"c2",five_hour:{left:25},seven_day:{left:25}}]}' > "$w/pool/codex-accounts.json"
+for ((i=0; i<4; i++)); do cmd_nohome pick codex --json --state "$w/pool" | jq -r .id; done > "$w/picks"
+is "Codex balances independently, with its own roster and headroom" "$(sort "$w/picks" | uniq -c | awk '{print $1}' | paste -sd:)" "3:1"
+rm -f "$w/pool/account-assignments.json"
+mkdir "$w/concurrent"
+for ((i=0; i<12; i++)); do cmd_nohome pick codex --json --state "$w/pool" > "$w/concurrent/$i" & done
+wait
+is "concurrent launches share the counter without lost assignments" "$(jq -r .id "$w/concurrent/"* | sort | uniq -c | awk '{print $1}' | paste -sd:)" "9:3"
+out=$(FM_ACCOUNT_POOL_ASSIGNMENT_SECONDS=0 cmd_nohome pick codex --json --state "$w/pool")
+is "expired assignments reset the winner to the most headroom" "$(jq -r .id <<<"$out")" c1
 
 [ "$fails" -eq 0 ] || { echo "$fails failed"; exit 1; }
 echo "all passed"
