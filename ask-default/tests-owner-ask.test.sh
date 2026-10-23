@@ -42,7 +42,7 @@ import json, sys
 card = json.load(open(sys.argv[1]))['decisions'][0]
 assert card['title'] == 'Can you test the new phone connection?'
 assert card['ask_ref'] == 'device-check' and card['close'] == 'release'
-assert len(card['about'].splitlines()) == 3
+assert len(card['about'].splitlines()) == 3 and len(card['why'].splitlines()) == 3
 assert len({o['outcome'] for o in card['options']}) == 2
 print('PASS: real board has the authored owner question, three context lines and distinct outcomes')
 PY

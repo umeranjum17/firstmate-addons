@@ -28,6 +28,7 @@ def validate(card):
     require(text.endswith('?') and text.count('?') == 1 and len(text.split()) <= 12,
             'write one question, 12 words or fewer')
     require(len(card['context']) == 3, 'give what it is, why now, and what is already done')
+    require(len('\n'.join(card['context'])) <= 200, 'the three context lines must fit 200 characters together')
     options = card['options']
     require(2 <= len(options) <= 3, 'give two or three choices')
     labels, outcomes = zip(*options)
@@ -89,7 +90,7 @@ def main():
             require(old == row_for(card, old[1], old[3]), 'authored ask differs from the list; author it again')
             require(card['id'] == args.id and args.url in ('done', 'release'), 'ask identity or close mode differs')
             command = ['sign-off-axi', 'raise', '--key', args.text, '--ask-ref', args.id,
-                       '--title', card['question'], '--about', '\n'.join(card['context']), '--why', card['context'][1],
+                       '--title', card['question'], '--about', '\n'.join(card['context']), '--why', '\n'.join(card['context']),
                        '--close', args.url, '--recommend', card['recommend'].lower(),
                        '--recommend-reason', card['reason'], '--default', card['default'].lower()]
             for label, outcome in card['options']:
