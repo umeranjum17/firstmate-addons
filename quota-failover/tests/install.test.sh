@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# quota-failover install journey: install.sh --all against a throwaway Main home and its secondmate homes, with the
-# real fork's check registration (FM_TEST_FORK=<Firstmate checkout>). One local home is reached and its hand-made
-# check backed up, a parked, a remote and a broken home are skipped and named, every reached check is trusted by
-# the fork's own reader and its shim runs the installed check, a rerun changes nothing, and uninstall --all
-# retires them all. No real home or HOME is touched.
+# quota-failover install journey: install.sh --all on throwaway homes with the real fork's check registration
+# (FM_TEST_FORK=<Firstmate checkout>): reached homes are trusted and their shims run, parked, remote and broken
+# homes are named, a rerun changes nothing, uninstall --all retires them all. No real home or HOME is touched.
 set -u
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 FORK=${FM_TEST_FORK:?set FM_TEST_FORK to a Firstmate checkout}
@@ -52,8 +50,10 @@ done
 is "alpha's hand-made check is backed up" "$(cat "$A"/state/quota-failover-watch.check.sh.bak-*)" "hand-made check"
 printf 'quota-failover: w1 stopped\n' >"$A/state/quota-failover.wake"
 is "alpha's shim runs the installed check on alpha" "$("$A/state/quota-failover-watch.check.sh")" "quota-failover: w1 stopped"
-is "the installed watcher reads the parked-homes lib beside it" \
-  "$(cmp "$SRC/parked-homes/bin/fm-parked-homes-lib.sh" "$XDG_DATA_HOME/fm-quota-failover/parked-homes/bin/fm-parked-homes-lib.sh" && echo same)" same
+for lib in parked-homes/bin/fm-parked-homes-lib.sh account-pool/bin/fm-pool-claude-env.sh; do
+  is "the installed watcher finds $lib at its own relative path" \
+    "$(cmp "$SRC/$lib" "$XDG_DATA_HOME/fm-quota-failover/quota-failover/../$lib" && echo same)" same
+done
 
 "$SRC/quota-failover/install.sh" --all "$M" >/dev/null 2>&1
 is "a rerun backs nothing up again" "$(find "$A/state" "$M/state" -name '*.bak-*' | wc -l)" 1

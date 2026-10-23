@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# run-live-proof.sh: a controlled real route failure recovers with no human. One disposable live lab
-# (FM_CHECKOUT/bin/fm-live-lab.sh: a real Claude Haiku lab main and its watcher) gets one real fm-spawn worker on
-# pi, pinned to a local provider that answers every call with HTTP 429, and this checkout's watcher installed into a
-# lab-only data path. The proof is the lab watcher's own pass moving the worker to Claude Haiku (subscription) and the
-# worker finishing its task there. Lab processes use the normal HOME and logins; the lab pi agent dir defines only
-# the local provider and holds no credential. Evidence: route.log, screens, the watcher log, the worker's status.
+# run-live-proof.sh: a controlled real route failure recovers with no human. A disposable live lab (FM_CHECKOUT's
+# fm-live-lab.sh, Haiku main) gets one real fm-spawn worker on pi, pinned to a local provider that answers HTTP 429, and
+# this checkout's watcher in a lab-only data path; PASS is the lab watcher moving it to Claude Haiku and the worker
+# finishing there. The lab pi agent dir defines only that provider and holds no credential.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 evidence=${DONE_DONE_EVIDENCE_ROOT:?}

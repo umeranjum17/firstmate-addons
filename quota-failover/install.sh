@@ -16,6 +16,8 @@ FMH=$(cd "$1" && pwd -P)
 SRC=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 DEST=${XDG_DATA_HOME:-$HOME/.local/share}/fm-quota-failover
 ID=quota-failover-watch
+# The sibling add-on libs the watcher sources by its own path, copied beside it in the same layout.
+LIBS="parked-homes/bin/fm-parked-homes-lib.sh account-pool/bin/fm-pool-claude-env.sh"
 
 # homes: "<name><TAB><dir>" for <fm-home> and, with --all, each active local secondmate home it lists.
 homes() {
@@ -36,11 +38,11 @@ homes() {
 
 [ "$LIST" -eq 0 ] || { homes; exit 0; }
 if [ "$DRY" -eq 1 ]; then
-  echo "would copy: $SRC/quota-failover/{quota-failover,check.sh} and $SRC/parked-homes/bin/fm-parked-homes-lib.sh -> $DEST"
+  echo "would copy: $SRC/quota-failover/{quota-failover,check.sh} and the sibling libs it sources ($LIBS) -> $DEST"
 else
   install -D -m 755 "$SRC/quota-failover/quota-failover" "$DEST/quota-failover/quota-failover"
   install -D -m 755 "$SRC/quota-failover/check.sh" "$DEST/quota-failover/check.sh"
-  install -D -m 644 "$SRC/parked-homes/bin/fm-parked-homes-lib.sh" "$DEST/parked-homes/bin/fm-parked-homes-lib.sh"
+  for lib in $LIBS; do install -D -m 644 "$SRC/$lib" "$DEST/$lib"; done
 fi
 fails=0
 while IFS=$'\t' read -r name home; do

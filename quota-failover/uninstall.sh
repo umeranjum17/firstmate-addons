@@ -14,6 +14,8 @@ while IFS=$'\t' read -r name home; do
   echo "uninstalled: $name: quota-failover-watch from $home"
 done < <("$SRC/install.sh" ${ALL:+--all} --list "$1")
 [ -z "$ALL" ] || {
-  rm -f -- "$DEST/quota-failover/quota-failover" "$DEST/quota-failover/check.sh" "$DEST/parked-homes/bin/fm-parked-homes-lib.sh"
-  rmdir -- "$DEST/quota-failover" "$DEST/parked-homes/bin" "$DEST/parked-homes" "$DEST" 2>/dev/null || true
+  rm -f -- "$DEST/quota-failover/quota-failover" "$DEST/quota-failover/check.sh" "$DEST/parked-homes/bin/fm-parked-homes-lib.sh" \
+    "$DEST/account-pool/bin/fm-pool-claude-env.sh"
+  rmdir -- "$DEST/quota-failover" "$DEST/parked-homes/bin" "$DEST/parked-homes" "$DEST/account-pool/bin" "$DEST/account-pool" "$DEST" \
+    2>/dev/null || true
 }
