@@ -138,7 +138,7 @@ cmp -s "$T/before.json" "$T/home/.claude/settings.json" && [ -e "$G/guard.mjs" ]
 un >/dev/null && set -- "$T"/home/.claude/settings.json.bak-kill-guard-* && jq -e '[.hooks.PreToolUse[].hooks[].command] == ["other-hook"] and .env.KEEP == "1"' "$T/home/.claude/settings.json" >/dev/null &&
   cmp -s "$T/before.json" "${!#}" && ok "uninstall drops only the kill-guard hook, with a backup" || no "uninstall settings"
 [ ! -e "$G" ] && [ ! -e "$T/home/.pi/agent/extensions/fm-kill-guard.ts" ] && [ ! -e "$T/home/.config/opencode/plugins/fm-kill-guard.js" ] && ok "uninstall removes the rule and adapters" || no "uninstall left files"
-jq -e '.theme == "dark" and .hooks.PreToolUse == []' "$T/pool1/settings.json" >/dev/null && ok "uninstall drops the pool account hook" || no "pool account uninstall"
+jq -e '.theme == "dark" and (has("hooks") | not)' "$T/pool1/settings.json" >/dev/null && ok "uninstall drops the pool account hook" || no "pool account uninstall"
 [ -z "$(un)" ] && ok "uninstall again changes nothing" || no "uninstall not idempotent"
 
 [ "$fail" -eq 0 ] && { echo "kill-guard e2e: all passed"; [ -z "${DONE_DONE_EVIDENCE_ROOT:-}" ] || printf 'kill-guard e2e: all passed\\n' > "$DONE_DONE_EVIDENCE_ROOT/result.txt"; } || { echo "kill-guard e2e: FAILED"; exit 1; }

@@ -12,7 +12,7 @@ E=(env HOME="$T/home" XDG_DATA_HOME="$T/data" XDG_CONFIG_HOME="$T/home/.config")
 jq -e '[.hooks.PreToolUse[].hooks[].command] | length == 1 and (.[0] | contains("fm-delete-guard/guard.mjs"))' "$T/pool1/settings.json" >/dev/null
 "${E[@]}" "$A/uninstall.sh" "$T/fm" >/dev/null
 jq -e '[.hooks.PreToolUse[].hooks[].command] == ["other-hook"]' "$T/home/.claude/settings.json" >/dev/null
-jq -e '.hooks.PreToolUse == []' "$T/pool1/settings.json" >/dev/null
+jq -e '(has("hooks") | not)' "$T/pool1/settings.json" >/dev/null
 [ ! -e "$T/data/fm-delete-guard/guard.mjs" ] && [ ! -e "$T/home/.pi/agent/extensions/fm-rm-guard.ts" ]
 before=$(sha256sum "$T/home/.claude/settings.json"); "${E[@]}" "$A/uninstall.sh" "$T/fm" >/dev/null; [ "$before" = "$(sha256sum "$T/home/.claude/settings.json")" ]
 echo PASS

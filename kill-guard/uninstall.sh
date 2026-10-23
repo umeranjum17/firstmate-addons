@@ -17,7 +17,7 @@ CLAUDE_DIRS=$( { echo "$HOME/.claude"; [ ! -e "$REG" ] || jq -r '.accounts[] | s
 while read -r d; do
   SETTINGS=$d/settings.json
   if [ -s "$SETTINGS" ] && jq -e '[.hooks.PreToolUse[]?.hooks[]? | (.command // "") | select(contains("fm-kill-guard/guard.mjs"))] | length > 0' "$SETTINGS" >/dev/null; then
-    jq '.hooks.PreToolUse = [.hooks.PreToolUse[] | .hooks |= map(select((.command // "") | contains("fm-kill-guard/guard.mjs") | not)) | select(.hooks | length > 0)]' \
+    jq '.hooks.PreToolUse = [.hooks.PreToolUse[] | .hooks |= map(select((.command // "") | contains("fm-kill-guard/guard.mjs") | not)) | select(.hooks | length > 0)] | if .hooks.PreToolUse == [] then del(.hooks.PreToolUse) else . end | if .hooks == {} then del(.hooks) else . end' \
       "$SETTINGS" > "$TMP/settings.json"
     diff -u --label "$SETTINGS (before)" --label "$SETTINGS (after)" "$SETTINGS" "$TMP/settings.json" || true
     if [ "$DRY" -eq 0 ]; then

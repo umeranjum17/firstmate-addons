@@ -130,7 +130,7 @@ EOF
 printf 'fixture-secret' > "$H/.codex/auth.json"
 HOME=$H node -e 'const fs=require("node:fs"); if(fs.readFileSync(process.env.HOME+"/.codex/auth.json","utf8")!=="fixture-secret") process.exit(1)'
 HOME=$H XDG_DATA_HOME=$H/.local/share "$ADDON/uninstall.sh" >/dev/null
-jq -e '[.hooks.PreToolUse[].hooks[].command] == ["keep-me"]' "$H/.claude/settings.json" >/dev/null && jq -e '.hooks.PreToolUse == []' "$T/pool1/settings.json" >/dev/null \
+jq -e '[.hooks.PreToolUse[].hooks[].command] == ["keep-me"]' "$H/.claude/settings.json" >/dev/null && jq -e '(has("hooks") | not)' "$T/pool1/settings.json" >/dev/null \
   || { echo "FAIL uninstall left a read-guard hook"; exit 1; }
 # No real auth contents are read, copied, or printed.
 echo 'read-guard e2e: PASS'

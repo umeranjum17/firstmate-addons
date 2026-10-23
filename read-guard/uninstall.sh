@@ -11,7 +11,7 @@ REG=${FM_CLAUDE_ACCOUNTS_REGISTRY:-$HOME/.muxr/plans/accounts-v1.json}
 CLAUDE_DIRS=$( { echo "$HOME/.claude"; [ ! -e "$REG" ] || jq -r '.accounts[] | select(.provider == "claude") | .folder' "$REG" || echo "warning: cannot read $REG; only ~/.claude is covered" >&2; } | awk '!seen[$0]++')
 while read -r d; do
   if [ -s "$d/settings.json" ] && jq -e '[.hooks.PreToolUse[]?.hooks[]? | (.command // "") | select(contains("fm-read-guard/guard.mjs"))] | length > 0' "$d/settings.json" >/dev/null; then
-    jq '.hooks.PreToolUse = [.hooks.PreToolUse[] | .hooks |= map(select((.command // "") | contains("fm-read-guard/guard.mjs") | not)) | select(.hooks | length > 0)]' "$d/settings.json" > "$d/settings.json.tmp"
+    jq '.hooks.PreToolUse = [.hooks.PreToolUse[] | .hooks |= map(select((.command // "") | contains("fm-read-guard/guard.mjs") | not)) | select(.hooks | length > 0)] | if .hooks.PreToolUse == [] then del(.hooks.PreToolUse) else . end | if .hooks == {} then del(.hooks) else . end' "$d/settings.json" > "$d/settings.json.tmp"
     [ "$DRY" -eq 1 ] || mv "$d/settings.json.tmp" "$d/settings.json"
   fi
 done <<<"$CLAUDE_DIRS"
