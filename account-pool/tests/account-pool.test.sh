@@ -61,13 +61,13 @@ fails=0
 is() { if [ "$2" = "$3" ]; then echo "ok - $1"; else echo "not ok - $1: got [$2], want [$3]"; fails=$((fails + 1)); fi; }
 run() { # run <addons-dir> <script> [args...]: sets out and rc, from a fresh pool
   local a=$1 s=$2; shift 2
-  rm -f "$w"/rested-* "$w/pool.log"
+  rm -f "$w"/rested-*; : > "$w/pool.log"
   out=$(env -i PATH="$PATH" HOME="$w" TMPDIR="$w" FM_ADDONS_DIR="$a" TEST_BIN="$w/bin" TEST_CONFIG="$w/config" \
     TEST_RAW="${TEST_RAW:-}" TEST_PIN="${TEST_PIN:-}" TEST_RECORDED="${TEST_RECORDED-acct1}" \
     TEST_SPAWN="$w/fake-spawn.sh" bash "$w/$s" "$@" 2>&1); rc=$?
 }
 run1() { is "$1" "$rc|${out##*$'\n'}" "$2"; }
-run2() { is "$1" "$(cat "$w/pool.log" 2>/dev/null | grep -c "$2")" "$3"; }
+run2() { is "$1" "$(grep -c "$2" "$w/pool.log")" "$3"; }
 
 run "$addons" fake-spawn.sh
 is "present: the pick lands in the launch line, spawned line and record" "$rc|$out" "0|account=acct1
