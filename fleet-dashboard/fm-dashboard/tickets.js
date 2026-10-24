@@ -105,8 +105,7 @@ function ByProject({ d, ts, go }) {
     html`<${Row} key=${p} onClick=${() => go({ project: [p] })} tile=${html`<${Tile} d=${d} name=${p}/>`} title=${p} value=${`${k} of ${n}`} pct=${Math.round(100 * k / n)} note=${`${Math.round(100 * k / n)}%`}/>`)}</div></section>`
 }
 const Tiles = ({ d }) => html`<div class="stats"><a class="soft stat" href="#/needs">${I(LIC.q, 20)}<span>Waiting on you</span><b class="num">${d.asks == null ? '?' : d.asks.length}<small>${d.asks?.length === 1 ? 'question' : 'questions'}</small></b></a>
-  <div class="soft stat" title="The median of each recorded merge's time from the task's last dispatch to the merge">${I(LIC.glass, 20)}<span>Typical start to landed</span><b class="num">${d.cycle_p50 == null ? '–' : dur(d.cycle_p50)}</b>
-    ${d.cycle_n ? html`<em>median of ${d.cycle_n} merges, dispatch to merge</em>` : ''}</div></div>`
+  <div class="soft stat" title=${`The median, over ${d.cycle_n ?? 'the'} recorded merges, of each one's time from the task's last dispatch to the merge`}>${I(LIC.glass, 20)}<span>Typical start to landed</span><b class="num">${d.cycle_p50 == null ? '–' : dur(d.cycle_p50)}</b></div></div>`
 // The filters, in one sheet: project, release and whether the list goes by state or by release.
 export function TicketFilter({ d, r, go, label }) {
   const all = d.tickets || [], [open, setOpen] = useState(false), n = r.project.length + r.release.length + !!r.by
