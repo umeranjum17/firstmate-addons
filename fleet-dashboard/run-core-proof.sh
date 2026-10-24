@@ -312,6 +312,18 @@ done
 # The computer's sidebar foot names the board's reader (config/owner-name) and when the board was read, in UTC.
 grep -qF 'Umer' "$DONE_DONE_EVIDENCE_ROOT/tickets-1280.txt" && grep -qE 'Board read [0-9]{2}:[0-9]{2} UTC' "$DONE_DONE_EVIDENCE_ROOT/tickets-1280.txt" \
   || { echo "run-core-proof: the sidebar foot lacks the reader or the board's read time" >&2; exit 1; }
+# Needs you leads with how many questions wait. Search (/) groups what matches: the ask's ticket and its lane by title.
+for w in 390 1280; do
+  grep -qF 'Questions waiting on you' "$DONE_DONE_EVIDENCE_ROOT/needs-$w.txt" || { echo "run-core-proof: Needs you at $w lacks its hero" >&2; exit 1; }
+  shot "search-$w" "?search-$w#/tickets" "$w" 'Your asks done'
+  chrome-devtools-axi eval "(() => { dispatchEvent(new KeyboardEvent('keydown', { key: '/' })); setTimeout(() => { const i = document.querySelector('.pal input'); i.value = 'layout'; i.dispatchEvent(new Event('input', { bubbles: true })) }, 200); return 1 })()" >/dev/null
+  sleep 1
+  chrome-devtools-axi eval 'document.querySelector(".pal").innerText' >"$DONE_DONE_EVIDENCE_ROOT/search-$w.txt"
+  chrome-devtools-axi screenshot "$DONE_DONE_EVIDENCE_ROOT/search-$w.png" >/dev/null
+  for want in Tickets Lanes 'Choose the layout for the new screen'; do
+    grep -qF -- "$want" "$DONE_DONE_EVIDENCE_ROOT/search-$w.txt" || { echo "run-core-proof: search at $w lacks '$want': $(cat "$DONE_DONE_EVIDENCE_ROOT/search-$w.txt")" >&2; exit 1; }
+  done
+done
 # Release lanes: a project's lowest named release is its Next release (alpha v0.2.0), a literal next stays Next
 # (beta), a later named release is After, and no release line is Later; done work is not in a lane.
 cols() { chrome-devtools-axi eval '(() => { document.querySelectorAll(".lane .all").forEach(b => b.textContent === "See all" && b.click()); return 1 })()' >/dev/null; sleep 0.5

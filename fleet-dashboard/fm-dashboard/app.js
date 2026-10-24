@@ -5,7 +5,7 @@ import { html, useState, useEffect, useRef, now, dur, hm, ACTIVE, STAGES, SNAME,
 import { TABS, inTab, byStage, stagesOf, Board, MobileKanban, Detail } from './board.js'
 import { Insights } from './insights.js'
 import { Tickets, IC_TICKET, ticketsHead, KindSeg, TicketFilter, proj } from './tickets.js'
-import { LABEL, Tile, LIC } from './look.js'
+import { LABEL, Tile, LIC, Chip, Row } from './look.js'
 const IC_CHART = html`<path d="M2.5 13.5h11M4.5 11V8.5M8 11V4.5M11.5 11V7"/>`
 const IC_METRICS = html`<path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5H8z"/><path d="M10 1.8a4.6 4.6 0 0 1 4.2 4.2H10z"/>`
 
@@ -143,7 +143,7 @@ function Chips({ d, r, go }) {
 
 // Needs you is the ask list and nothing else: a hero with how many questions wait, then one row per question with its
 // type, its age and an Open link to answer it where it was asked; the order and the type sit in the filter sheet.
-const ASK_IC = { yn: IC.check, pick: LIC.list, approval: LIC.stamp }
+const ASK_IC = { yn: IC.check, pick: LIC.list, approval: LIC.stamp }, ASK_WORD = { yn: 'Yes or no', pick: 'Pick one', approval: 'Approval' }
 function NeedsFilter({ r, go, label }) {
   const [open, setOpen] = useState(false), opt = (k, v, n) => html`<button class="opt" aria-pressed=${(r[k] || '') === v} onClick=${() => go({ [k]: v })}><span class="ck">${(r[k] || '') === v ? I(IC.check, 11) : ''}</span><span class="lt">${n}</span></button>`
   return html`<div class="anchor"><button class=${label ? 'btn' : 'ib'} aria-expanded=${open} aria-label="Filters" onClick=${() => setOpen(!open)}>${I(IC.filter, label ? 16 : 20)}${label}${r.order || r.atype ? html`<b>${!!r.order + !!r.atype}</b>` : ''}</button>
@@ -155,8 +155,8 @@ const Needs = ({ d, r, wide }) => {
   if (!d.asks.length) return html`<div class="none">${I(IC.inbox, 32)}<p>Nothing needs you.</p></div>`
   const all = d.asks.map(a => ({ ...a, kind: askType(a.text, a.type) })), shown = askOrder(all, r.order !== 'old').map(a => ({ ...a, kind: askType(a.text, a.type) })).filter(a => !r.atype || a.kind === r.atype)
   const hero = html`<section class="soft hero"><div class="h"><div class="sp"><label>Questions waiting on you</label><div class="big num">${d.asks.length}</div></div>
-    <div class="hside">${Object.entries(ASK_TAG).filter(([k]) => all.some(a => a.kind === k)).map(([k, n]) => html`<span class="delta num">${all.filter(a => a.kind === k).length} ${n}</span>`)}</div></div></section>`
-  const list = html`<div class="grp">${shown.map(a => html`<div class="trow"><span class="tile">${I(ASK_IC[a.kind], 20)}</span><span class="rx two"><span class="t"><h3>${a.text}</h3><span class="tch">${ASK_TAG[a.kind]}</span></span>
+    <div class="hside">${Object.entries(ASK_WORD).filter(([k]) => all.some(a => a.kind === k)).map(([k, n]) => html`<span class="delta num">${all.filter(a => a.kind === k).length} ${n.toLowerCase()}</span>`)}</div></div></section>`
+  const list = html`<div class="grp">${shown.map(a => html`<div class="trow"><span class="tile">${I(ASK_IC[a.kind], 20)}</span><span class="rx two"><span class="t"><h3>${a.text}</h3><span class="tch">${ASK_WORD[a.kind]}</span></span>
     <span class="m"><span>${a.age == null ? 'Time asked not recorded' : `Asked ${dur(a.age)} ago`}</span>${a.url ? html`<a href=${a.url} target="_blank" rel="noreferrer">Open ›</a>` : ''}</span></span></div>`)}${!shown.length ? html`<p class="empty">Nothing of this type waits on you</p>` : ''}</div>`
   const name = html`<h2>Questions</h2><small class="num">${shown.length}</small><span class="all">${r.order === 'old' ? 'Oldest first' : 'Newest first'}</span>`
   return wide ? html`<div class="kgrid" style="margin-top:0"><section class="soft k8"><div class="lhd">${name}</div>${list}</section><div class="k4">${hero}</div></div>`
@@ -322,35 +322,34 @@ function Overview({ d, od, go }) {
     </div></div>`
 }
 
-function Palette({ d, go, close, toggleTheme }) {
-  const [q, setQ] = useState(''), [i, setI] = useState(0), input = useRef()
+// Search, as the reference has it: a pill, then what matches by group (views, open tickets by priority, lanes in
+// flight, homes), three of each until you type; arrows and Enter pick one.
+function Palette({ d, go, close }) {
+  const [q, setQ] = useState(''), [i, setI] = useState(0), input = useRef(), wide = innerWidth >= 760
   useEffect(() => input.current?.focus(), [])  // autofocus is ignored while a card holds focus
-  const groups = [
-    ['Go to', [['tickets', 'Tickets'], ['board', 'Board'], ['overview', 'Metrics'], ['insights', 'Insights'], ['needs', 'Needs you']].map(([v, n]) => ({ n, k: v === 'insights' ? '' : `G ${n[0]}`, run: () => go({ view: v, card: null }) }))],
-    ['Actions', [
-      { n: 'Show stuck lanes', run: () => go({ view: 'board', tab: 'active', state: ['blocked', 'decision'], stage: [], card: null }) },
-      { n: 'Group rows by home', k: '⇧G', run: () => go({ view: 'board', rows: 'home' }) },
-      { n: 'Clear filters', run: () => go({ home: [], model: [], state: [], stage: [] }) },
-      { n: 'Light or dark theme', k: 'T', run: toggleTheme }]],
-    ['Homes', d.homes.map(h => ({ n: h.name, k: `${h.known ? h.open : '?'} open`, run: () => go({ view: 'board', home: [h.id], card: null }) }))],
-    ['Lanes', [...ACTIVE, 'queued', 'landed'].flatMap(s => sorted(d.cards.filter(c => c.stage === s))).map(c => ({ n: c.title, i: html`<${StageIcon} s=${c.stage}/>`,
-      k: state(c)?.[0] || hname(d, c.home), bad: stuck(c), run: () => go({ view: 'board', card: c.id }) }))],
-  ]
-  const ql = q.toLowerCase()
-  const hits = groups.map(([g, xs]) => [g, xs.filter(a => a.n.toLowerCase().includes(ql)).slice(0, g === 'Lanes' ? 30 : 10)]).filter(([, xs]) => xs.length)
-  const flat = hits.flatMap(([, xs]) => xs)
+  const ql = q.toLowerCase(), hit = s => !ql || s.toLowerCase().includes(ql), n = k => ql ? k : 3, tp = Object.fromEntries((d.tickets || []).map(t => [t.id, t.priority]))
+  const hits = [
+    ['Go to', NAV.filter(([, , t]) => hit(t)).map(([v, ic, t]) => ({ t, tile: html`<span class="tile">${I(ic, 20)}</span>`, run: () => go({ view: v, card: null, ticket: null }) }))],
+    ['Tickets', (d.tickets || []).filter(t => t.state !== 'done' && hit(t.title)).sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9)).slice(0, n(8))
+      .map(t => ({ t: t.title, p: t.priority, tile: html`<${Tile} d=${d} name=${proj(d, t)}/>`, run: () => go({ view: 'tickets', ticket: t.id, card: null }) }))],
+    ['Lanes', ACTIVE.flatMap(s => sorted(d.cards.filter(c => c.stage === s))).filter(c => hit(c.title)).slice(0, n(8))
+      .map(c => ({ t: c.title, p: tp[c.id], tile: html`<${Tile} d=${d} name=${c.home}/>`, run: () => go({ view: 'board', card: c.id, ticket: null }) }))],
+    ['Homes', d.homes.filter(h => hit(h.name)).slice(0, n(12)).map(h => ({ t: h.name, tile: html`<${Tile} d=${d} name=${h.id}/>`, run: () => go({ view: 'board', home: [h.id], card: null, ticket: null }) }))],
+  ].filter(([, xs]) => xs.length)
+  const flat = hits.flatMap(([, xs]) => xs), pick = a => { a.run(); close() }
   const key = e => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setI(Math.min(i + 1, flat.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setI(Math.max(i - 1, 0)) }
-    else if (e.key === 'Enter' && flat[i]) { flat[i].run(); close() }
+    else if (e.key === 'Enter' && flat[i]) pick(flat[i])
   }
-  useEffect(() => document.querySelector('.pal [aria-selected=true]')?.scrollIntoView({ block: 'nearest' }), [i])
+  useEffect(() => document.querySelector('.pal [aria-current=true]')?.scrollIntoView({ block: 'nearest' }), [i])
   let k = -1
   return html`<div class="scrim dim" onClick=${close}></div><div class="pal" role="dialog" aria-label="Search and jump">
-    <input ref=${input} placeholder="Search a lane, a home or a command…" value=${q} onInput=${e => { setQ(e.target.value); setI(0) }} onKeyDown=${key}/>
-    <ul>${hits.map(([g, xs]) => html`<li class="pop-h">${g}</li>${xs.map(a => { const j = ++k
-      return html`<li class="opt" aria-selected=${i === j} onMouseMove=${() => i !== j && setI(j)} onClick=${() => { a.run(); close() }}>${a.i || ''}<span class="lt">${a.n}</span>${a.k ? html`<small class=${a.bad ? 'bad' : ''}>${a.k}</small>` : ''}</li>` })}`)}
-      ${!flat.length && html`<li class="pop-h">Nothing matches</li>`}</ul></div>`
+    <div class="in">${I(IC.search, 20)}<input ref=${input} placeholder="Search tickets, lanes, homes, views" value=${q} onInput=${e => { setQ(e.target.value); setI(0) }} onKeyDown=${key}/>
+      <button class="ib" onClick=${close} aria-label="Close">${I(IC.x, 16)}</button></div>
+    <div class="res">${hits.map(([g, xs]) => html`<div class="lh"><h2>${g}</h2></div><div class="soft grp">${xs.map(a => { const j = ++k
+      return html`<${Row} onClick=${() => pick(a)} cur=${wide && i === j} tile=${a.tile} chip=${a.p !== undefined && html`<${Chip} p=${a.p}/>`} title=${a.t} value=${i === j && wide ? html`<kbd>Enter</kbd>` : null}/>` })}</div>`)}
+      ${!flat.length && html`<p class="empty">Nothing matches “${q}”</p>`}</div></div>`
 }
 const KEYS = [['⌘K or /', 'Search and jump'], ['G then B, T, N', 'Board, Tickets, Needs you'], ['H J K L or arrows', 'Move between cards'], ['Enter', 'Open the card'],
   ['J K in a card', 'Next and previous lane'], ['Esc', 'Close'], ['⇧G', 'Rows by home on or off'], ['T', 'Light or dark theme'], ['?', 'This list']]
@@ -410,7 +409,7 @@ function App() {
   const list = (byStage(r.tab) ? stagesOf(r.tab, r.stage) : [r.tab]).flatMap(s => sorted(shown.filter(c => c.stage === s)))
   const title = NAV.find(([v]) => v === r.view)[2], head = r.view === 'tickets' ? ticketsHead(d, r) : r.view === 'needs' ? { h: 'What waits on you', sub: `${d.asks?.length ?? '?'} questions from your leads and Main · answer each where it was asked` } : { h: title }
   const overlays = html`${r.card && html`<${Detail} d=${d} id=${r.card} go=${go} list=${list}/>`}
-    ${pal && html`<${Palette} d=${d} go=${go} close=${() => setPal(false)} toggleTheme=${toggleTheme}/>`}${keys && html`<${Shortcuts} close=${() => setKeys(false)}/>`}`
+    ${pal && html`<${Palette} d=${d} go=${go} close=${() => setPal(false)}/>`}${keys && html`<${Shortcuts} close=${() => setKeys(false)}/>`}`
   const body = r.view === 'tickets' ? html`<${Tickets} d=${d} r=${r} go=${go} wide=${wide}/>` : r.view === 'overview' ? html`<${Overview} d=${d} od=${ov} go=${go}/>` : r.view === 'insights' ? html`<${Insights} d=${d}/>` : r.view === 'needs' ? html`<${Needs} d=${d} r=${r} wide=${wide}/>` : null
   if (!wide) return html`<div class="phone">
     <header class="top">${LABEL()}<div class="tr"><h1>${title}</h1><div class="caps">${r.view === 'board' ? html`<${Filters} d=${d} r=${r} go=${go}/>` : r.view === 'tickets' ? html`<${TicketFilter} d=${d} r=${r} go=${go}/>` : r.view === 'needs' ? html`<${NeedsFilter} r=${r} go=${go}/>` : ''}<button class="ib" onClick=${toggleTheme} aria-label="Light or dark theme">${I(themeIcon(), 20)}</button></div></div></header>
