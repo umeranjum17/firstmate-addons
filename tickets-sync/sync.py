@@ -52,8 +52,22 @@ def sync():
         parked_file = home / 'config/parked-homes'
         parked = {l.split('#')[0].strip() for l in parked_file.read_text().splitlines()} if parked_file.exists() else set()
         cutoff = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+        cursor = state / 'cursor.json'
+        resume = json.loads(cursor.read_text()) if cursor.exists() else {}
+        ordered = list(homes.items())
+        if resume.get('home') in homes: ordered = ordered[list(homes).index(resume['home']):]
         changed = gaps = 0
-        for name, source in homes.items():
+        def save_cursor(value):
+            temp = cursor.with_suffix('.tmp'); temp.write_text(json.dumps(value)); temp.replace(cursor)
+        def publish(tid, desired):
+            nonlocal changed
+            old = current.get(tid, {})
+            if all(k == 'progress' and tid in parents or old.get(k, '') == (v == 'yes' if k in ('hold', 'asked') else v) for k, v in desired.items()): return
+            args = ['sign-off-axi', 'ticket', str(board), '--id', tid]
+            for key, value in desired.items(): args += ['--' + key, str(value)]
+            run(args); changed += 1
+            current[tid] = {k: v == 'yes' if k in ('hold', 'asked') else v for k, v in desired.items()}
+        for name, source in ordered:
             env = {k: v for k, v in os.environ.items() if k not in ('FM_DATA_OVERRIDE', 'FM_ROOT_OVERRIDE', 'TASKS_AXI_FILE', 'TASKS_AXI_BACKEND')}
             env['FM_HOME'] = str(source)
             reader = ['bash', str(home / 'bin/fm-tasks-axi.sh')]
@@ -69,13 +83,19 @@ def sync():
             if archive.exists():
                 archive_copy.write_text(re.sub(r'^## Archived[^\n]*$', '## Done', archive.read_text(), flags=re.M))
             archived = rows(['tasks-axi', 'list', '--state', 'done', '--backend', 'markdown', '--file', str(archive_copy)], env, state) if archive.exists() else []
-            tasks = {r['id']: r for r in archived + tasks}.values()
-            for r in tasks:
+            tasks = {r['id']: r for r in archived + tasks}
+            ids = list(tasks)
+            if resume.get('home') == name and resume.get('task') in tasks: ids = ids[ids.index(resume['task']):]
+            projects = {}
+            required = set(resume.get('required', [])) if resume.get('home') == name else set()
+            for item in ids:
+                r = tasks[item]
                 if time.monotonic() - started > 20:
-                    print('tickets-sync: backfill continuing on next watcher check')
+                    save_cursor(dict(home=name, task=item, required=list(required)))
+                    print(f'tickets-sync: backfill continuing on next watcher check; {changed} changed')
                     return
                 tid = ticket_id(name, r['id'])
-                if r['state'] == 'done' and r.get('closed', '-') < cutoff and tid not in current: continue
+                if r['state'] == 'done' and r.get('closed', '-') < cutoff and tid not in current and item not in required: continue
                 if '\n... (truncated, ' in r['title'] + r.get('body', ''):
                     full = run(reader + ['show', r['id'], '--full'], env) if r not in archived else run(['tasks-axi', 'show', r['id'], '--full', '--file', str(archive_copy)], env, state)
                     for key, value in re.findall(r'^  (title|body): (.*)$', full, re.M): r[key] = json.loads(value) if value.startswith('"') else value
@@ -89,7 +109,8 @@ def sync():
                 label = 'Done' if done else 'On hold' if held else 'To do' if r['state'] == 'queued' else 'In progress'
                 links = re.findall(r'https?://[^\s,\]\)]+', r.get('links', '') + '\n' + r['title'] + '\n' + body)
                 size = lambda text: len(text.encode('utf-16-le')) // 2
-                detail = [label, (field('release') or 'later')[:64]]
+                epic = '[captain-ask]' in r['title']
+                detail = (['Epic'] if epic else []) + [label, (field('release') or 'later')[:64]]
                 links = list(dict.fromkeys(links))
                 while links and size(' · '.join(detail + links)) > 115:
                     links.pop(); gaps += 1
@@ -97,14 +118,24 @@ def sync():
                 title = plain(re.sub(r'https?://\S+', '', r['title']).strip())
                 room = 160 - size(suffix)
                 title = (title.encode('utf-16-le')[:2*(room-1)].decode('utf-16-le', errors='ignore').rstrip() + '…' if size(title) > room else title) + suffix
-                parent = field('parent') or field('epic')
-                desired = dict(title=title, progress=progress, parent=ticket_id(name, parent) if parent else '', priority=f"P{r['priority']}" if str(r.get('priority')) in ('0', '1', '2', '3') else '', project=r.get('repo', '') if r.get('repo') != '-' else name, hold='yes' if held and not done else 'no', asked='yes' if '[captain-ask]' in r['title'] else 'no')
-                old = current.get(tid, {})
-                if all(k == 'progress' and tid in parents or old.get(k, '') == (v == 'yes' if k in ('hold', 'asked') else v) for k, v in desired.items()): continue
-                args = ['sign-off-axi', 'ticket', str(board), '--id', tid]
-                for key, value in desired.items(): args += ['--' + key, str(value)]
-                run(args)
-                changed += 1
+                repo = r.get('repo') if r.get('repo') not in ('-', 'none', '') else name
+                if repo not in projects:
+                    clone = source / 'projects' / repo
+                    origin = run(['git', '-C', str(clone), 'remote', 'get-url', 'origin']).strip() if (clone / '.git').exists() else repo
+                    projects[repo] = origin.rstrip('/').split('/')[-1].removesuffix('.git')
+                project = projects[repo]
+                parent = '' if epic else field('parent')
+                if parent in tasks and ticket_id(name, parent) not in current:
+                    required.add(parent); ids.append(parent)
+                upkeep = parent == 'upkeep'
+                if not epic and (upkeep or parent not in tasks or parent == item):
+                    group = 'Upkeep' if upkeep else 'Needs a parent'
+                    parent = ':' + group + ':' + project
+                    publish(ticket_id(name, parent), dict(title=group + ' · ' + project, progress=0, project=project, hold='yes' if name in parked else 'no', asked='no' if upkeep else 'yes'))
+                    parents.add(ticket_id(name, parent))
+                desired = dict(title=title, progress=progress, parent=ticket_id(name, parent) if parent else '', priority=f"P{r['priority']}" if str(r.get('priority')) in ('0', '1', '2', '3') else '', project=project, hold='yes' if held and not done else 'no', asked='no' if upkeep else 'yes')
+                publish(tid, desired)
+        save_cursor({})
         if changed: print(f'tickets-sync: {len(homes)} homes read; {changed} tickets changed; {gaps} links exceed the public title limit')
 
 if __name__ == '__main__':
