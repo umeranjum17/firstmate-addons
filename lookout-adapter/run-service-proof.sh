@@ -15,6 +15,12 @@ for _ in $(seq 100); do curl -fs "http://127.0.0.1:$port/api/fleet" -o "$ev/flee
   for r in tickets needs backlog measure overview; do curl -s -o /dev/null -w "/$r -> %{http_code} %{redirect_url}\n" "http://127.0.0.1:$port/$r"; done
   curl -s "http://127.0.0.1:$port/" | grep -o '<title>[^<]*'
 } >"$ev/spare-port-check.txt"
+export CHROME_DEVTOOLS_AXI_SESSION=lookout-service-proof-$$
+chrome-devtools-axi open "http://127.0.0.1:$port/?theme=light#/overview" >/dev/null
+chrome-devtools-axi resize 390 844 >/dev/null
+chrome-devtools-axi wait updated >/dev/null; sleep 1
+chrome-devtools-axi screenshot "$ev/spare-port-overview-390.png" >/dev/null
+chrome-devtools-axi stop >/dev/null
 { LOOKOUT_DIR=$LOOKOUT_DIR "$here/install.sh" --dry-run; echo; "$here/install.sh" --rollback --dry-run; } >"$ev/install-dry-run.txt" 2>&1
 python3 - "$(git -C "$here" rev-parse HEAD)" >"$ev/steps.json" <<'P'
 import json, sys
