@@ -35,6 +35,6 @@ for shot in "overview 390 844 light" "lanes 390 844 light" "flow 1440 900 dark" 
   read -r s w h theme <<<"$shot"
   chrome-devtools-axi open "http://127.0.0.1:$lp/?theme=$theme#/$s" >/dev/null
   chrome-devtools-axi resize "$w" "$h" >/dev/null
-  sleep 1.5
+  chrome-devtools-axi wait updated >/dev/null; sleep 1
   chrome-devtools-axi screenshot "$DONE_DONE_EVIDENCE_ROOT/$s-$w-$theme.png" >/dev/null
 done
