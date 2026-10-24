@@ -63,4 +63,11 @@ tmux -L "$sock" capture-pane -p -t lead | grep . | scrub >"$evidence/3-pane-afte
 grep -q 'moved off its unrecorded account to account pa_most_room' "$evidence/2-tool-output.txt" \
   && grep -q 'account-pool/bin/fm-account-pool-lib.sh' "$evidence/2-tool-output.txt" \
   && grep -q 'relaunched on account pa_most_room' "$evidence/3-pane-after.txt" || { echo "FAIL limit-prompt-move live" >&2; exit 1; }
+python3 - "$(git -C "$repo" rev-parse HEAD)" >"$evidence/steps.json" <<'P'
+import json, sys
+print(json.dumps({'target': {'version': sys.argv[1]}, 'start': 'a tmux pane showing the captured Claude usage-limit menu; a fixture home with a stub pool tool; the tool freshly installed in a temporary folder',
+  'steps': ['install limit-prompt-move into a temporary data folder', 'run the installed tool once; it loads the pool library from the account-pool add-on', 'the tool reads the pane, finds the usage-limit menu and sends Escape through fm-control, choosing no option',
+            'the tool asks the pool for its pick and relaunches the lead on that account', 'capture the pane before, the tool output and the pane after'],
+  'result': 'the lead sitting on the limit menu was interrupted with Escape and relaunched on account pa_most_room, with the pool library loaded from the add-on'}, indent=2))
+P
 echo "PASS limit-prompt-move live"
