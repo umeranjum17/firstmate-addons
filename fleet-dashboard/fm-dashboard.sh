@@ -198,8 +198,8 @@ MAX_AGE = int(MAX_AGE)
 PAGE = os.path.join(DIR, 'index.html')
 ROUTES = {'/backlog': 'backlog', '/measure': 'measure', '/data.json': 'data', '/board.json': 'board'}
 # The app's own files: one optional folder level, no hidden names, no other types.
-STATIC = re.compile(r'/((?:[\w-]+/)?[\w-][\w.-]*\.(js|css|svg|woff2))')
-TYPES = {'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8', 'svg': 'image/svg+xml', 'woff2': 'font/woff2',
+STATIC = re.compile(r'/((?:[\w-]+/)?[\w-][\w.-]*\.(js|css|svg|png|woff2))')
+TYPES = {'js': 'text/javascript; charset=utf-8', 'css': 'text/css; charset=utf-8', 'svg': 'image/svg+xml', 'png': 'image/png', 'woff2': 'font/woff2',
          'html': 'text/html; charset=utf-8', 'json': 'application/json'}
 PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
 APP_CSP = "default-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'"
@@ -245,7 +245,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.command != 'HEAD': self.wfile.write(body)
 
     def file(self, path, ext, csp=PAGE_CSP):  # answered by version: 304 when the client already has it; text gzipped when asked
-        gz = ext != 'woff2' and 'gzip' in (self.headers.get('Accept-Encoding') or '')
+        gz = ext not in ('woff2', 'png') and 'gzip' in (self.headers.get('Accept-Encoding') or '')
         try:
             with open(path, 'rb') as fh:
                 st = os.fstat(fh.fileno())
