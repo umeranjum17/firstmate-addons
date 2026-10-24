@@ -4,6 +4,7 @@
 # this checkout's watcher in a lab-only data path; PASS is the lab watcher moving it to Claude Haiku and the worker
 # finishing there. The lab pi agent dir defines only that provider and holds no credential. The evidence is one readable
 # route.log (setup, the 429 calls, the move, the finish, teardown) and steps.json; raw lab output stays in $work/raw.
+# A set CLAUDE_CONFIG_DIR (a pool account) reaches every lab Claude and its trust store, as fm-live-lab.sh does.
 set -euo pipefail
 # The real pi first on PATH: in a lab, fm-spawn's `pi --help` probe through the mise shim never returned (24 Oct).
 real_pi=$(mise which pi 2>/dev/null) && PATH=$(dirname "$real_pi"):$PATH
@@ -44,7 +45,7 @@ rec() { sed -n "s/^$1=//p" "$ROOT/.fm-live-lab" | head -n 1; }
 LAB=$(rec home) TMUX_DIR=$(rec tmux_dir)
 lab_run() { (cd "$LAB" && env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" PATH="$PATH" SHELL="${SHELL:-/bin/bash}" \
   TERM=xterm-256color LANG="${LANG:-en_US.UTF-8}" TMUX_TMPDIR="$TMUX_DIR" TREEHOUSE_ROOT="$ROOT/treehouse" FM_BACKEND=tmux \
-  DISABLE_AUTOUPDATER=1 FM_HOME="$LAB" "$@"); }
+  DISABLE_AUTOUPDATER=1 FM_HOME="$LAB" ${CLAUDE_CONFIG_DIR:+CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR"} "$@"); }
 
 git init -q -b main "$work/seed" && mkdir -p "$work/seed/notes"
 printf 'NOTES = []\n\n\ndef add_note(text):\n    NOTES.append(text)\n    return len(NOTES) - 1\n' >"$work/seed/notes/__init__.py"
