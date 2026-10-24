@@ -25,6 +25,12 @@ f = json.load(open(sys.argv[1]))['fleet']
 print(f['name'], '| lists:', ', '.join(f'{k} {len(v)}' for k, v in f.items() if isinstance(v, list)))
 assert f['name'] != 'Sample fleet' and f['lanes'] and f['quota'] and f['merges']
 P
+python3 - "$(git -C "$here" rev-parse HEAD)" >"$DONE_DONE_EVIDENCE_ROOT/steps.json" <<'P'
+import json, sys
+print(json.dumps({'target': {'version': sys.argv[1]}, 'start': 'the real Firstmate home, read only, with lookout-firstmate serving it and a lookout clone reading that URL',
+  'steps': ['open Lookout on its Overview, Lanes, Flow and Capacity screens', 'read the fleet name and the lanes, quota and merges of the real fleet'],
+  'result': 'the screens show the real fleet (document.txt names it and its list counts), not the Sample fleet'}, indent=2))
+P
 for shot in "overview 390 844 light" "lanes 390 844 light" "flow 1440 900 dark" "capacity 1440 900 dark"; do
   read -r s w h theme <<<"$shot"
   chrome-devtools-axi open "http://127.0.0.1:$lp/?theme=$theme#/$s" >/dev/null
