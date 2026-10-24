@@ -48,12 +48,22 @@ chmod +x "$w/bin/done-done" "$w/bin/pool-claude"
 export POOL_FOLDER=$w/pool/profile
 export PATH="$w/bin:$PATH" FM_HOME="$w/home"
 out=$(bash "$here/merge-card" post --board "$w/board/decisions.json" demo "$w/clone" "$head" - 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
-[ -z "$(git -C "$w/clone" status --porcelain)" ]
+echo "merge-card post (done-done post opt-in on, the clone is the work copy):"
+printf '%s\n' "$out" | sed 's/^/  /'
+status=$(git -C "$w/clone" status --porcelain)
+echo "git status --porcelain in the clone: [${status}] (empty means clean)"
+[ -z "$status" ]
+echo "clone entries: $(find "$w/clone" -mindepth 1 -maxdepth 1 -printf "%f ")"
 [ ! -e "$w/clone/.sign-off" ]
+keys=$(sign-off-axi list "$w/board/decisions.json" --json --full | jq -r '[.decisions[].key] | join(" ")')
+echo "cards on the board outside the clone: $keys"
 sign-off-axi list "$w/board/decisions.json" --json --full | jq -e '[.decisions[].key] | any(startswith("merge-")) and any(. == "dd-evidence-demo")' >/dev/null
 mkdir "$w/clone/.sign-off"
 out=$(bash "$here/merge-card" post --board "$w/board/decisions.json" demo "$w/clone" "$head" - 2>&1)
+echo "post with a stray .sign-off folder already in the clone:"
+printf '%s\n' "$out" | sed 's/^/  /'
 [[ "$out" == *'stray board in the work copy'* ]]
-[ -d "$w/clone/.sign-off" ] && [ -z "$(ls -A "$w/clone/.sign-off")" ]
+echo "stray folder still there: $([ -d "$w/clone/.sign-off" ] && echo yes), entries inside: $(find "$w/clone/.sign-off" -mindepth 1 | wc -l)"
+[ -d "$w/clone/.sign-off" ] && [ -z "$(find "$w/clone/.sign-off" -mindepth 1)" ]
 jq -n '{target:{version:"merge-card post"},start:"A throwaway git clone is the merge'"'"'s work copy and done-done'"'"'s post opt-in is on.",steps:["Run merge-card post with a board outside the clone.","Check git status of the clone is clean and the cards are on the board.","Leave an empty .sign-off folder in the clone and post again."],result:"The clone stays clean, the merge card and done-done card sit on the board, and the stray folder is reported and left in place."}' >"$DONE_DONE_EVIDENCE_ROOT/steps.json"
 printf '%s\n' 'merge-card clean-clone journey passed'
