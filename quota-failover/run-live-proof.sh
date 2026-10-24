@@ -10,11 +10,11 @@ repo=$(cd "$(dirname "$0")/.." && pwd -P)
 evidence=${DONE_DONE_EVIDENCE_ROOT:?}
 FMC=${FM_CHECKOUT:?set FM_CHECKOUT to a Firstmate checkout}
 port=${LAB_429_PORT:-18429} wait=${LAB_WAIT_SECS:-1800} ID=lab429-worker
-mkdir -p "$evidence"
-work=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/fm-quota-failover-live.XXXXXX")
+mkdir -p "$evidence" && work=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/fm-quota-failover-live.$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
 ROOT=$work/lab srv=''
-done_lab() { [ -z "$srv" ] || kill "$srv" 2>/dev/null; "$FMC/bin/fm-live-lab.sh" down "$ROOT" >"$evidence/lab-down.txt" 2>&1 || true; rm -rf -- "$work"; }
-trap done_lab EXIT
+done_lab() { local rc=$?; [ -z "$srv" ] || kill "$srv" 2>/dev/null
+  "$FMC/bin/fm-live-lab.sh" down "$ROOT" >"$evidence/lab-down.txt" 2>&1 || echo "lab kept for a later down: $ROOT" >>"$evidence/lab-down.txt"; exit "$rc"; }
+trap done_lab EXIT # deletes nothing itself and keeps the result: a refused `down` leaves the lab for a later one
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$evidence/route.log"; }
 
 mkdir -p "$work/pi-agent"
