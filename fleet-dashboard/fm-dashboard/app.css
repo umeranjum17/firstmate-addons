@@ -73,6 +73,9 @@ kbd{font:500 11px Inter,sans-serif;color:var(--ink-3);border:1px solid var(--lin
 .live{display:inline-flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12px}
 .live i{width:8px;height:8px;border-radius:4px;background:var(--good)}
 .live.stale{color:var(--warn)}.live.stale i{background:var(--warn)}
+.me{display:flex;align-items:center;gap:12px;min-width:0;font-size:12px;line-height:16px;color:var(--ink-3);text-align:left}
+.me i{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:16px;background:var(--tile);font-style:normal;font-weight:650;color:var(--ink-2)}
+.me b{display:block;color:var(--ink);font-weight:600}.me.stale span{color:var(--warn)}
 .main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:auto;padding:24px 32px 48px 16px}
 .hd{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;min-height:80px;padding-bottom:16px;flex:none}
 .hd .tx{flex:1 0 auto;margin-right:8px}
@@ -250,6 +253,7 @@ a.pill:hover{background:var(--hover)}
   .side .sec{font-size:0;height:1px;width:24px;padding:0;margin:10px 0;background:var(--line-2)}
   .side .foot{flex-direction:column;height:auto;padding:0;gap:6px}
   .side .live{font-size:0;width:28px;height:28px;justify-content:center}
+  .side .me span{display:none}
 }
 @media (max-width:759px){
   .peek{inset:0;width:auto;border-radius:0;animation:sheet .2s ease-out}

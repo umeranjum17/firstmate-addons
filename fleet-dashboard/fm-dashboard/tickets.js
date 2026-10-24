@@ -55,7 +55,7 @@ function Steps({ c }) {
     <span class="num">${spent[i - 1] > 0 ? dur(spent[i - 1]) : ''}</span></div>`)}</div>`
 }
 // The ticket page: the reference's project page on a phone (a hero with the ticket's progress, three tiles, the
-// captain's words, its fields, then the thread as cards), Margin's job page on a computer (how far it has got stage by
+// captain's words, then the thread as cards), Margin's job page on a computer (how far it has got stage by
 // stage, what happened as a timeline, the comment bar, and the fields with the captain's words beside).
 function TicketPage({ d, t, go, wide }) {
   const c = d.cards.find(x => x.id === t.id), n = prNum(t.pr), close = () => go({ ticket: null }), ref = useRef(), [sent, setSent] = useState([]), [all, setAll] = useState(false), [open, setOpen] = useState(false)
@@ -71,13 +71,13 @@ function TicketPage({ d, t, go, wide }) {
   const more = k => items.length > k ? html`<button class="all" onClick=${() => setAll(!all)}>${all ? 'Show fewer' : 'See all'}</button>` : ''
   const empty = html`<p class="empty">No status lines yet: the thread starts when a lane works on it.</p>`
   const said1 = t.ask && html`${I(LIC.user, 16)}Your words${t.ask.day ? ` · ${t.ask.day}` : ''}${t.ask.ref ? ` · ${t.ask.ref}` : ''}`
-  const rows = [[LIC.bolt, 'Priority', html`<${Chip} p=${t.priority}/>${t.priority != null ? PRIO[t.priority] : 'Not set'}`], [IC.board, 'Project', wide && html`<${Tile} d=${d} name=${proj(d, t)} small/>${proj(d, t)}`],
-    [LIC.user, 'Lead', lead(d, t.home)], [IC_RELEASE, 'Release', cap(t.release)], [IC.pr, 'Pull request', !wide && n && html`<a href=${t.pr} target="_blank" rel="noreferrer">#${n}</a>`],
+  const rows = [[LIC.bolt, 'Priority', html`<${Chip} p=${t.priority}/>${t.priority != null ? PRIO[t.priority] : 'Not set'}`], [IC.board, 'Project', html`<${Tile} d=${d} name=${proj(d, t)} small/>${proj(d, t)}`],
+    [LIC.user, 'Lead', lead(d, t.home)], [IC_RELEASE, 'Release', cap(t.release)],
     [LIC.check, 'Proof', t.proof && html`<span class=${'num ' + (t.proof.receipt === 'FAIL' || t.proof.check && t.proof.check !== 'pass' ? 'bad' : '')}>${[t.proof.receipt && `Receipt ${t.proof.receipt}`,
       t.proof.check && `done-done ${t.proof.check}`, t.proof.head].filter(Boolean).join(' · ')}</span>`],
-    [LIC.glass, wide ? 'Updated' : 'Last update', html`<span class="num">${ago(t.updated)}</span>${typeof t.updated === 'number' ? html`<small>${hm(t.updated)}</small>` : ''}`]]
-  const fields = html`<section class="soft">${rows.map(([ic, k, v]) => v ? html`<div class="kv"><span>${wide ? I(ic, 16) : ''}${k}</span><b>${v}</b></div>` : '')}
-    ${wide && t.ask ? html`<div class="noted"><small>${said1}</small>“${t.ask.words}”</div>` : ''}</section>`
+    [LIC.glass, 'Updated', html`<span class="num">${ago(t.updated)}</span>${typeof t.updated === 'number' ? html`<small>${hm(t.updated)}</small>` : ''}`]]
+  const fields = html`<section class="soft">${rows.map(([ic, k, v]) => v ? html`<div class="kv"><span>${I(ic, 16)}${k}</span><b>${v}</b></div>` : '')}
+    ${t.ask ? html`<div class="noted"><small>${said1}</small>“${t.ask.words}”</div>` : ''}</section>`
   // a long description shows its first lines, as the reference does; a tap reads the rest
   const desc = cls => t.desc ? html`<p class=${cls + (open ? ' open' : '')} title=${open ? '' : 'Show all'} onClick=${() => setOpen(!open)}>${t.desc}</p>` : ''
   const say = html`<${Comment} t=${t} onSent=${x => setSent([...sent, x])}/>`
@@ -96,7 +96,7 @@ function TicketPage({ d, t, go, wide }) {
       <div class="pb"><span class="bar"><i style=${{ width: `${p}%` }}></i></span><small class="num">${p}%</small></div><div class="st">${live ? html`${SNAME[c.stage]}${wait ? html` · <em>${wait}</em>` : ''}` : col}</div></section>
     <div class="tiles3"><div class="soft"><span>${t.priority != null ? PRIO[t.priority] : 'No priority'}</span><b><${Chip} p=${t.priority}/></b></div>
       <div class="soft"><span>Project</span><b><${Tile} d=${d} name=${proj(d, t)} small/><em>${proj(d, t)}</em></b></div><div class="soft"><span>Last update</span><b class="num">${ago(t.updated)}</b></div></div>
-    ${t.ask ? html`<section class="soft words"><label>${said1}</label><q>${t.ask.words}</q></section>` : ''}${fields}
+    ${t.ask ? html`<section class="soft words"><label>${said1}</label><q>${t.ask.words}</q></section>` : ''}
     <div class="lh"><h2>Activity</h2>${items.length ? html`<small class="num">${items.length}</small>` : ''}${more(3)}</div>${items.length ? (all ? items : items.slice(0, 3)).map(card) : empty}${say}</aside>`
 }
 // How far a ticket's lane has got, from Queued to Landed; a ticket with no lane takes its state.

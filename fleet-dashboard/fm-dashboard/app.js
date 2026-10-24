@@ -107,6 +107,15 @@ function Live({ d, st, refresh }) {
   return html`<button class=${'live' + (bad ? ' stale' : '')} onClick=${refresh} title=${st.err ? `Cannot refresh: ${st.err}` : 'Refresh now'}><i></i>${st.err ? 'Cannot refresh' : a < 60 ? 'Live' : `Updated ${dur(a)} ago`}</button>`
 }
 
+// The sidebar's foot, as the reference has it: who reads the board and when it was read (UTC); red when the board is
+// stale or cannot refresh, and a tap refreshes it.
+function Me({ d, st, refresh }) {
+  useTick(15000)
+  const bad = st.err || now() - d.generated > STALE_S, who = d.owner || 'You'
+  return html`<button class=${'me' + (bad ? ' stale' : '')} onClick=${refresh} title=${st.err ? `Cannot refresh: ${st.err}` : 'Refresh now'}><i>${Array.from(who)[0]}</i>
+    <span><b>${who}</b>${st.err ? 'Cannot refresh' : `Board read ${new Date(d.generated * 1000).toISOString().slice(11, 16)} UTC`}</span></button>`
+}
+
 // One popover for the three filters; on a phone it is a bottom sheet.
 function Pop({ label, icon, badge, children }) {
   const [open, setOpen] = useState(false), ref = useRef()
@@ -415,7 +424,7 @@ function App() {
       ${d.homes.map(h => { const cs = open.filter(c => c.home === h.id)
         return html`<button class="nav home-nav" aria-label=${h.name} title=${h.name} aria-current=${r.view === 'board' && r.home.length === 1 && r.home[0] === h.id ? 'page' : null} onClick=${() => go({ view: 'board', home: [h.id], card: null })}>
           <${Tile} d=${d} name=${h.id} small/><span class="home-name">${h.name}</span><span class="home-short" aria-hidden="true">${Array.from(h.name).slice(0, 4).join('')}</span>${cs.some(stuck) ? html`<span class="dot" title="Stuck lanes"></span>` : ''}<span class="n num">${h.known ? cs.length : '?'}</span></button>` })}`}
-      <div class="foot"><${Live} d=${d} st=${st} refresh=${refresh}/><span class="sp"></span><button class="ib" onClick=${toggleTheme} aria-label="Light or dark theme">${I(themeIcon())}</button></div>
+      <div class="foot"><${Me} d=${d} st=${st} refresh=${refresh}/><span class="sp"></span><button class="ib" onClick=${toggleTheme} aria-label="Light or dark theme">${I(themeIcon())}</button></div>
     </nav>
     <main class="main">
       <header class="hd"><div class="tx">${LABEL(html`<em>› ${title}</em>`)}<h1>${head.h}</h1>${head.sub ? html`<p>${head.sub}</p>` : ''}</div>
