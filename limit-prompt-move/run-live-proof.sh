@@ -24,7 +24,7 @@ cat >"$home/bin/fm-control.sh" <<'CTL'
 #!/usr/bin/env bash
 case $2 in
   interrupt) tmux -L "$TMUX_SOCK" send-keys -t lead Escape; echo "fm-control $1 interrupt: sent key Escape to the pane" >>"$FM_HOME/state/control.log" ;;
-  relaunch) echo "fm-control $1 relaunch --account $4" >>"$FM_HOME/state/control.log"; echo "$4" >"$FM_HOME/state/relaunched"; printf "account=%s\nspawn_gen=s2\n" "$4" >>"$FM_HOME/state/$1.meta" ;;
+  relaunch) echo "fm-control $1 relaunch --account $4" >>"$FM_HOME/state/control.log"; cp "$6" "$FM_HOME/state/note"; echo "$4" >"$FM_HOME/state/relaunched"; printf "account=%s\nspawn_gen=s2\n" "$4" >>"$FM_HOME/state/$1.meta" ;;
 esac
 CTL
 chmod +x "$home/bin/fm-control.sh"
@@ -41,12 +41,19 @@ cat '$repo/limit-prompt-move/tests/weekly-limit-menu.screen'
 IFS= read -rsn1 k
 [ "\$k" = \$'\e' ] && echo '[pane] Escape received: menu cancelled, no option chosen'
 while [ ! -f '$S/relaunched' ]; do sleep 0.2; done
-echo "[pane] claude relaunched on account \$(cat '$S/relaunched')"; sleep 30
+clear
+echo ' ▐▛███▛█▄╱✦  Claude Code v2.1.310 (relaunched)'
+echo "▝▜██████▘    Haiku 5.5 · now on account \$(cat '$S/relaunched') (pool pick)"
+echo ' ▝▝   ▝▝     ~/work/notes'
+echo
+echo '  Previous session: usage-limit menu cancelled with Esc; no menu option was chosen.'
+echo "❯ \$(cat '$S/note')"
+sleep 30
 PANE
-tmux -L "$sock" new-session -d -s lead -x 100 -y 60 "bash $tmp/pane.sh"
+tmux -L "$sock" new-session -d -s lead -x 100 -y 50 "bash $tmp/pane.sh"
 sleep 1
 scrub() { sed "s|$tmp|\$TMP|g"; }
-tmux -L "$sock" capture-pane -p -t lead | scrub >"$evidence/1-limit-screen-before.txt"
+tmux -L "$sock" capture-pane -p -t lead | cat -s | scrub >"$evidence/1-limit-screen-before.txt"
 
 XDG_DATA_HOME=$tmp/share "$repo/limit-prompt-move/install.sh" "$home" >/dev/null
 tool=$tmp/share/fm-limit-prompt-move/limit-prompt-move/limit-prompt-move
@@ -62,7 +69,7 @@ sleep 1
 tmux -L "$sock" capture-pane -p -t lead | grep . | scrub >"$evidence/3-pane-after.txt"
 grep -q 'moved off its unrecorded account to account pa_most_room' "$evidence/2-tool-output.txt" \
   && grep -q 'account-pool/bin/fm-account-pool-lib.sh' "$evidence/2-tool-output.txt" \
-  && grep -q 'relaunched on account pa_most_room' "$evidence/3-pane-after.txt" || { echo "FAIL limit-prompt-move live" >&2; exit 1; }
+  && grep -q 'now on account pa_most_room' "$evidence/3-pane-after.txt" || { echo "FAIL limit-prompt-move live" >&2; exit 1; }
 python3 - "$(git -C "$repo" rev-parse HEAD)" >"$evidence/steps.json" <<'P'
 import json, sys
 print(json.dumps({'target': {'version': sys.argv[1]}, 'start': 'a tmux pane showing the captured Claude usage-limit menu; a fixture home with a stub pool tool; the tool freshly installed in a temporary folder',
