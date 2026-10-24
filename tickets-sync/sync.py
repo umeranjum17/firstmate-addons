@@ -31,7 +31,7 @@ def rows(args, env, cwd=None):
     return result
 
 ICONS = Path(__file__).resolve().parents[1] / 'fleet-dashboard/fm-dashboard/icons'
-ALIAS = {'firstmate-fork': 'firstmate', 'muxr': 'pockit'}  # the dashboard's own project-to-image names
+ALIAS = {'firstmate-fork': 'firstmate', 'main': 'firstmate', 'muxr': 'pockit'}  # the dashboard's own project-to-image names
 
 def icon_problem(image):
     if image.suffix == '.svg':
