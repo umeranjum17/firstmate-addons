@@ -19,8 +19,10 @@ export function Tile({ d, name, small }) {
   const ic = ICONS[name] || ICONS[homeProject(d, name)], [f, pos] = Array.isArray(ic) ? ic : [ic]
   return html`<span class=${(small ? 'mono' : 'tile') + (ic ? ' img' : '')} aria-hidden="true">${ic ? html`<img src=${'icons/' + f} alt="" style=${pos ? { objectPosition: pos } : null}/>` : mono(name)}</span>`
 }
+// the one label every view carries, so each screen names the dashboard it belongs to
+export const LABEL = (extra = '') => html`<span class="dash"><i>F</i>Fleet dashboard${extra}</span>`
 export const PRIO = ['Urgent', 'High', 'Medium', 'Low']
-export const LIC = { q: html`<circle cx="8" cy="8" r="5.5"/><path d="M6.5 6.4a1.6 1.6 0 1 1 2.2 1.5c-.5.2-.7.6-.7 1.1M8 11v.1"/>`,
+export const LIC = { back: html`<path d="M10 3.5L5.5 8l4.5 4.5"/>`, q: html`<circle cx="8" cy="8" r="5.5"/><path d="M6.5 6.4a1.6 1.6 0 1 1 2.2 1.5c-.5.2-.7.6-.7 1.1M8 11v.1"/>`,
   glass: html`<path d="M4.5 2.5h7M4.5 13.5h7M5 2.5c0 3 3 3.5 3 5.5s-3 2.5-3 5.5M11 2.5c0 3-3 3.5-3 5.5s3 2.5 3 5.5"/>` }
 // Inter as bundled has no slashed zero, so the chip draws its own and keeps the digit for copy and screen readers.
 const ZERO = html`<svg class="z" viewBox="0 0 7 10" aria-hidden="true"><ellipse cx="3.5" cy="5" rx="2.55" ry="4.05" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.7 7.4L5.3 2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`

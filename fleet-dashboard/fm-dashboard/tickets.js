@@ -5,7 +5,7 @@
 // serves, its fields and its thread: the captain's comments with the lead's answers and, for a live lane, its status lines.
 import { html, useState, useEffect, useRef, now, dur, hm, prNum, hc, hname, I, IC } from './ui.js'
 import { squash, Entry } from './board.js'
-import { Tile, Chip, Row, LIC } from './look.js'
+import { Tile, Chip, Row, LIC, PRIO, LABEL } from './look.js'
 
 export const IC_TICKET = html`<path d="M2.5 4.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v2a1.5 1.5 0 0 0 0 3v2a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2a1.5 1.5 0 0 0 0-3zM10 5.5v1M10 9.5v1"/>`
 const IC_RELEASE = html`<path d="M8 2.5l5.5 5.5L8 13.5 2.5 8z"/>`
@@ -15,7 +15,6 @@ const CAP = 30
 const at = u => typeof u === 'number' ? u : u ? Date.parse(`${u}T12:00:00`) / 1000 : 0
 const ago = u => typeof u === 'number' ? dur(now() - u) : u ? (k => k < 1 ? 'today' : `${k}d`)(Math.round((new Date().setHours(12, 0, 0, 0) / 1000 - at(u)) / 86400)) : ''
 const order = (s, ts) => [...ts].sort(s === 'done' ? (a, b) => at(b.updated) - at(a.updated) : (a, b) => (a.priority ?? 9) - (b.priority ?? 9) || at(b.updated) - at(a.updated))
-const PRIO = ['Urgent', 'High', 'Medium', 'Low']
 // Release lanes: a project's open items by target release. Next, After and Later are their own lanes; of a project's
 // named releases (v0.2.0, muxr 0.2.10) the lowest version is its Next release unless it already has items marked next.
 const LANES = [['next', 'Next release'], ['after', 'After'], ['later', 'Later']]
@@ -48,30 +47,36 @@ function Comment({ t, onSent }) {
     <div class="row"><small role="status">${note || 'Goes to the owning lead as a steer'}</small><span class="sp"></span><button class="btn" type="submit" disabled=${busy || !text.trim()}>Send</button></div></form>`
 }
 const lead = (d, h) => h === 'main' ? 'Main' : `${hname(d, h)} lead`
-function TicketPage({ d, t, go }) {
+// The ticket page: the reference's project page on a phone (a hero with the ticket's progress, three tiles, the
+// captain's words, its fields, then the thread), Margin's job page on a computer (the fields and words beside it).
+function TicketPage({ d, t, go, wide }) {
   const c = d.cards.find(x => x.id === t.id), n = prNum(t.pr), close = () => go({ ticket: null }), ref = useRef(), [sent, setSent] = useState([])
   // a comment shows at once; the build's copy replaces it on the next refresh
   const said = [...(t.comments || []), ...sent.filter(x => !(t.comments || []).some(y => y.text === x.text))]
   useEffect(() => { ref.current?.focus(); const f = e => e.key === 'Escape' && close(); addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [t.id])
-  const P = (k, v) => v ? html`<dt>${k}</dt><dd>${v}</dd>` : ''
-  return html`<div class="scrim dim" onClick=${close}></div><aside class="peek" role="dialog" aria-label=${t.title} tabindex="-1" ref=${ref}>
-    <div class="bar"><span>${COLS.find(([s]) => s === t.state)[1]}</span><span class="sp"></span><button class="ib" onClick=${close} aria-label="Close">${I(IC.x)}</button></div>
-    <div class="body"><div class="id">${t.project || 'No project'}</div><h2>${t.title}</h2>${t.desc ? html`<p class="why tk-desc">${t.desc}</p>` : ''}
-      ${t.ask ? html`<blockquote class="tk-ask"><small>Serves your ask${t.ask.day ? ` of ${t.ask.day}` : ''}${t.ask.ref ? ` · ${t.ask.ref}` : ''}</small>“${t.ask.words}”</blockquote>` : ''}
-      <dl class="props">${P('Priority', t.priority != null && html`<span class=${'pill prio p' + t.priority}>P${t.priority}</span>${PRIO[t.priority] || ''}`)}
-        ${P('Release', html`${I(IC_RELEASE, 12)}${cap(t.release)}`)}
-        ${P('Owner', html`<span class="pill"><span class="sq" style=${{ '--c': hc(d, t.home) }}></span>${hname(d, t.home)}</span>`)}
-        ${P('Pull request', n && html`<a class="pill pr" href=${t.pr} target="_blank" rel="noreferrer">${I(IC.pr, 12)}#${n}</a>`)}
-        ${P('Proof', t.proof && html`<span class=${'num ' + (t.proof.receipt === 'FAIL' || t.proof.check && t.proof.check !== 'pass' ? 'bad' : '')}>${[t.proof.receipt && `Receipt ${t.proof.receipt}`,
-          t.proof.check && `done-done ${t.proof.check}`, t.proof.head].filter(Boolean).join(' · ')}</span>${t.proof.at ? html`<small>${hm(t.proof.at)}</small>` : ''}`)}
-        ${P('Last update', html`<span class="num">${ago(t.updated)}</span>${typeof t.updated === 'number' ? html`<small>${hm(t.updated)}</small>` : ''}`)}</dl>
-      <div class="h4">Activity</div><${Comment} t=${t} onSent=${x => setSent([...sent, x])}/>${c?.history.length || said.length ? html`<ul class="act">${[...said.flatMap(x => [{ ...x, mine: true }, ...(x.picked ? [{ at: x.picked, by: x.to, text: 'Picked up your comment', answer: true }] : []),
+  const P = (k, v) => v ? html`<div class="kv"><span>${k}</span><b>${v}</b></div>` : '', p = pct(d, t)
+  const state = html`${COLS.find(([s]) => s === t.state)[1]}${c && t.state !== 'done' ? html` · ${c.wait ? html`<em class="bad">${{ blocked: 'Blocked', decision: 'Needs a decision', waiting: 'Waiting', parked: 'On hold' }[c.wait]}</em>` : 'moving'}` : ''}`
+  const words = t.ask && html`<section class="soft words"><label>${I(LIC.q, 16)}Serves your ask${t.ask.day ? ` of ${t.ask.day}` : ''}${t.ask.ref ? ` · ${t.ask.ref}` : ''}</label><q>${t.ask.words}</q></section>`
+  const fields = html`<section class="soft">${P('Priority', html`<${Chip} p=${t.priority}/>${t.priority != null ? PRIO[t.priority] : 'Not set'}`)}${P('Release', html`${I(IC_RELEASE, 12)}${cap(t.release)}`)}
+    ${P('Owner', lead(d, t.home))}${P('Pull request', n && html`<a href=${t.pr} target="_blank" rel="noreferrer">${I(IC.pr, 12)}#${n}</a>`)}
+    ${P('Proof', t.proof && html`<span class=${'num ' + (t.proof.receipt === 'FAIL' || t.proof.check && t.proof.check !== 'pass' ? 'bad' : '')}>${[t.proof.receipt && `Receipt ${t.proof.receipt}`,
+      t.proof.check && `done-done ${t.proof.check}`, t.proof.head].filter(Boolean).join(' · ')}</span>`)}
+    ${P('Last update', html`<span class="num">${ago(t.updated)}</span>${typeof t.updated === 'number' ? html`<small>${hm(t.updated)}</small>` : ''}`)}</section>`
+  const thread = html`<div class="lh"><h2>Activity</h2></div><${Comment} t=${t} onSent=${x => setSent([...sent, x])}/>${c?.history.length || said.length ? html`<ul class="act soft">${[...said.flatMap(x => [{ ...x, mine: true }, ...(x.picked ? [{ at: x.picked, by: x.to, text: 'Picked up your comment', answer: true }] : []),
           ...(x.replies || []).map(y => ({ ...y, at: y.at || x.at, answer: true }))]), ...squash(c?.history || [])]
         .sort((a, b) => (b.at || 0) - (a.at || 0)).map(x => x.answer ? html`<li class="mine"><b class="ok"></b><div><div class="h"><strong>${lead(d, x.by)}</strong><span class="sp"></span><span class="num">${hm(x.at)}</span></div><p>${x.text}</p></div></li>`
           : x.mine ? html`<li class="mine"><b class=${x.error ? 'bad' : 'ok'}></b><div><div class="h"><strong>You</strong><span class="sp"></span><span class="num">${hm(x.at)}</span></div>
           <p>${x.text}</p><small>${x.error ? `Not delivered: ${x.error}` : x.to === 'main' ? 'Sent to Main' : `Sent to the ${lead(d, x.to)} as a steer`}</small></div></li>` : html`<${Entry} x=${x}/>`)}</ul>`
-        : html`<p class="empty">No status lines yet: the thread starts when a lane works on it.</p>`}
-    </div></aside>`
+        : html`<p class="empty">No status lines yet: the thread starts when a lane works on it.</p>`}`
+  const hero = html`<section class="soft hero"><h2>${t.title}</h2>${t.desc ? html`<p class="tk-desc">${t.desc}</p>` : ''}
+    <div class="pb"><span class="bar"><i style=${{ width: `${p}%` }}></i></span><small class="num">${p}%</small></div><div class="st">${state}</div></section>`
+  return html`<aside class=${'tpage' + (wide ? ' wide' : '')} role="dialog" aria-label=${t.title} tabindex="-1" ref=${ref}>
+    ${wide ? html`<div class="crumbs">${LABEL()}<span>›</span><a onClick=${close}>Tickets</a><span>›</span><${Tile} d=${d} name=${t.project || t.home} small/>${t.project || 'No project'}</div>
+      <div class="tgrid"><div>${hero}${thread}</div><div>${fields}${words}</div></div>`
+    : html`<div class="tbar"><button class="ib" onClick=${close} aria-label="Close">${I(LIC.back, 20)}</button><b>${t.project || 'No project'}</b>${n ? html`<a class="ib" href=${t.pr} target="_blank" rel="noreferrer" aria-label="Pull request">${I(IC.pr, 20)}</a>` : html`<span class="ib ghost"></span>`}</div>
+      ${hero}<div class="tiles3"><div class="soft"><span>${t.priority != null ? PRIO[t.priority] : 'No priority'}</span><b><${Chip} p=${t.priority}/></b></div>
+        <div class="soft"><span>Project</span><b><${Tile} d=${d} name=${t.project || t.home} small/><em>${t.project || 'none'}</em></b></div><div class="soft"><span>Last update</span><b class="num">${ago(t.updated)}</b></div></div>
+      ${words}${fields}${thread}`}</aside>`
 }
 // How far a ticket's lane has got, from Queued to Landed; a ticket with no lane takes its state.
 const STEP = { queued: 0, building: 17, review: 33, test: 50, ci: 67, merge: 83, landed: 100 }
@@ -124,5 +129,5 @@ export function Tickets({ d, r, go, wide }) {
   return html`<div class=${'tks' + (wide ? ' wide' : '')}>${unread.length ? html`<p class="sum"><span class="bad">Backlog not read: ${unread.map(h => hname(d, h)).join(', ')}</span></p>` : ''}
     ${wide ? html`<${Hero} ts=${ts} r=${r} go=${go} aside=${html`<${Tiles} d=${d}/>`}/><div class="kgrid"><div class="k8" style="display:flex;flex-direction:column;gap:16px">${body}</div><div class="k4"><${ByProject} d=${d} ts=${ts} go=${go}/></div></div>`
       : html`<${KindSeg} d=${d} r=${r} go=${go} counts/><div style="margin-top:16px"><${Hero} ts=${ts} r=${r} go=${go}/></div>${body}<${Tiles} d=${d}/>`}
-    ${page ? html`<${TicketPage} d=${d} t=${page} go=${go}/>` : ''}</div>`
+    ${page ? html`<${TicketPage} d=${d} t=${page} go=${go} wide=${wide}/>` : ''}</div>`
 }

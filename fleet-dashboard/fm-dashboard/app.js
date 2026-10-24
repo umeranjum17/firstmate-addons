@@ -5,14 +5,12 @@ import { html, useState, useEffect, useRef, now, dur, hm, ACTIVE, STAGES, SNAME,
 import { TABS, inTab, byStage, stagesOf, Board, MobileKanban, Detail } from './board.js'
 import { Insights } from './insights.js'
 import { Tickets, IC_TICKET, ticketsHead, KindSeg, TicketFilter, proj } from './tickets.js'
-import { Tile } from './look.js'
+import { LABEL, Tile } from './look.js'
 const IC_CHART = html`<path d="M2.5 13.5h11M4.5 11V8.5M8 11V4.5M11.5 11V7"/>`
 const IC_METRICS = html`<path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5H8z"/><path d="M10 1.8a4.6 4.6 0 0 1 4.2 4.2H10z"/>`
 
 // the views, in nav order, for the phone's pill nav and the desktop sidebar; the epics view slots in as one more entry
 const NAV = [['tickets', IC_TICKET, 'Tickets'], ['needs', IC.inbox, 'Needs you'], ['board', IC.board, 'Board'], ['overview', IC_METRICS, 'Metrics'], ['insights', IC_CHART, 'Insights']]
-// the one label every view carries, so each screen names the dashboard it belongs to
-const LABEL = (extra = '') => html`<span class="dash"><i>F</i>Fleet dashboard${extra}</span>`
 
 const POLL_MS = 10000, STALE_S = 15 * 60, WIDE = '(min-width: 760px)'
 
