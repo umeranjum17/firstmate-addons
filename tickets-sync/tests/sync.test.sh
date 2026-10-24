@@ -16,6 +16,7 @@ printf 'parked\n' > "$FM_HOME/config/parked-homes"
 printf '[markdown]\npath="data/backlog.md"\narchive="data/done-archive.md"\ndone_keep=0\n' > "$FM_HOME/.tasks.toml"
 cp "$FM_HOME/.tasks.toml" "$work/parked/.tasks.toml"
 (cd "$FM_HOME"; tasks-axi add parent 'Umer release' --repo alpha --priority 1 >/dev/null
+ tasks-axi add long "Umer 🚢 $(printf 'long title %.0s' {1..30})" --repo alpha --priority 1 --body $'release: next\nhttps://github.com/example/alpha/pull/123\nhttps://github.com/example/alpha/pull/456' >/dev/null
  tasks-axi add held 'Umer paused item' --repo alpha --priority 1 >/dev/null
  tasks-axi hold held --reason 'Umer parked this item' --kind parked >/dev/null
  tasks-axi add child '[captain-ask] Umer settings' --repo alpha --priority 0 --body $'release: next\nepic: parent' >/dev/null)
@@ -29,7 +30,7 @@ env -u FM_HOME "$FM_HOME/state/tickets-sync.check.sh"
 ticket_id() { printf 'fm-%s\n' "$(printf '%s' "$1" | sha256sum | cut -c1-32)"; }
 child=$(ticket_id main/child) parent=$(ticket_id main/parent) parked=$(ticket_id parked/parent)
 sign-off-axi ticket "$work/board.json" --json > "$work/first.json" || { cat "$work/first.json"; exit 1; }
-jq -e '.tickets | length == 5' "$work/first.json"
+jq -e '.tickets | length == 6 and all(.[]; (.title | length) <= 160)'  "$work/first.json"
 jq -e --arg id "$child" --arg parent "$parent" '.tickets[] | select(.id == $id) | .parent == $parent and .priority == "P0" and .asked == true and (.title | contains("next"))' "$work/first.json"
 jq -e --arg id "$parked" '.tickets[] | select(.id == $id) | .hold == true' "$work/first.json"
 jq -e --arg id "$(ticket_id main/held)" '[.tickets[] | select(.id == $id and .hold == true)] | length == 1' "$work/first.json"

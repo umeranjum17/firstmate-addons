@@ -12,6 +12,7 @@ Parked homes and held items are On hold; completion clears hold and sets progres
 Queued work starts at 0%, active work at 17%, and completed work at 100%; these are lifecycle markers, not measured effort.
 Epic progress follows sign-off's child average.
 An explicit `parent:` or `epic:` body line supplies hierarchy; absent hierarchy is left empty.
+Public ticket titles cap at 160 characters: long names are abbreviated, and links that exceed the available suffix space are counted in the sync output.
 Release, state and source links use a title suffix because public ticket flags have no fields for them; source cards need their producer to supply `--ticket`.
 The command fails visibly for unreadable, capped, remote or unsupported non-markdown backlogs; it never closes missing items by inference or mutates a backlog.
 Run `FM_TEST_FORK=<Firstmate-checkout> bash tickets-sync/tests/sync.test.sh` for the installed check's idempotency, hierarchy, parking and archive close journey.

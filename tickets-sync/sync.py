@@ -52,7 +52,7 @@ def sync():
         parked_file = home / 'config/parked-homes'
         parked = {l.split('#')[0].strip() for l in parked_file.read_text().splitlines()} if parked_file.exists() else set()
         cutoff = (dt.date.today() - dt.timedelta(days=7)).isoformat()
-        changed = 0
+        changed = gaps = 0
         for name, source in homes.items():
             env = {k: v for k, v in os.environ.items() if k not in ('FM_DATA_OVERRIDE', 'FM_ROOT_OVERRIDE', 'TASKS_AXI_FILE', 'TASKS_AXI_BACKEND')}
             env['FM_HOME'] = str(source)
@@ -88,8 +88,15 @@ def sync():
                 progress = 100 if done else 0 if held or r['state'] == 'queued' else 17
                 label = 'Done' if done else 'On hold' if held else 'To do' if r['state'] == 'queued' else 'In progress'
                 links = re.findall(r'https?://[^\s,\]\)]+', r.get('links', '') + '\n' + r['title'] + '\n' + body)
-                suffix = ' · '.join(dict.fromkeys([label, field('release') or 'later'] + links))
-                title = plain(re.sub(r'https?://\S+', '', r['title']).strip()) + ' · ' + suffix
+                size = lambda text: len(text.encode('utf-16-le')) // 2
+                detail = [label, (field('release') or 'later')[:64]]
+                links = list(dict.fromkeys(links))
+                while links and size(' · '.join(detail + links)) > 115:
+                    links.pop(); gaps += 1
+                suffix = ' · ' + ' · '.join(detail + links)
+                title = plain(re.sub(r'https?://\S+', '', r['title']).strip())
+                room = 160 - size(suffix)
+                title = (title.encode('utf-16-le')[:2*(room-1)].decode('utf-16-le', errors='ignore').rstrip() + '…' if size(title) > room else title) + suffix
                 parent = field('parent') or field('epic')
                 desired = dict(title=title, progress=progress, parent=ticket_id(name, parent) if parent else '', priority=f"P{r['priority']}" if str(r.get('priority')) in ('0', '1', '2', '3') else '', project=r.get('repo', '') if r.get('repo') != '-' else name, hold='yes' if held and not done else 'no', asked='yes' if '[captain-ask]' in r['title'] else 'no')
                 old = current.get(tid, {})
@@ -98,7 +105,7 @@ def sync():
                 for key, value in desired.items(): args += ['--' + key, str(value)]
                 run(args)
                 changed += 1
-        if changed: print(f'tickets-sync: {len(homes)} homes read; {changed} tickets changed')
+        if changed: print(f'tickets-sync: {len(homes)} homes read; {changed} tickets changed; {gaps} links exceed the public title limit')
 
 if __name__ == '__main__':
     try: sync()
