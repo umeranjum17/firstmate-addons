@@ -4,6 +4,8 @@
 # this checkout's watcher in a lab-only data path; PASS is the lab watcher moving it to Claude Haiku and the worker
 # finishing there. The lab pi agent dir defines only that provider and holds no credential.
 set -euo pipefail
+# The real pi first on PATH: in a lab, fm-spawn's `pi --help` probe through the mise shim never returned (24 Oct).
+real_pi=$(mise which pi 2>/dev/null) && PATH=$(dirname "$real_pi"):$PATH
 repo=$(cd "$(dirname "$0")/.." && pwd -P)
 evidence=${DONE_DONE_EVIDENCE_ROOT:?}
 FMC=${FM_CHECKOUT:?set FM_CHECKOUT to a Firstmate checkout}
@@ -52,8 +54,7 @@ XDG_DATA_HOME=$ROOT/xdg "$repo/quota-failover/install.sh" "$LAB" | tee -a "$evid
 lab_run "$LAB/bin/fm-brief.sh" "$ID" notes --mode local-only >/dev/null
 sed -i 's|{TASK}|Add count_notes(), which returns how many notes are stored, to notes/__init__.py.|; s|{FIRSTMATE_SPEC}|Implement count_notes(), commit, and report done. Nothing else is in scope.|' "$LAB/data/$ID/brief.md"
 lab_run "$LAB/bin/fm-tasks-axi.sh" add "$ID" "lab worker on a rate-limited route" --kind ship --repo notes --priority 3 >/dev/null
-# A host tool that hangs at spawn (seen: the pi shim stuck on `pi --help` for 4 h) fails the run instead.
-lab_run timeout "${LAB_SPAWN_SECS:-600}" "$LAB/bin/fm-spawn.sh" "$ID" "$LAB/projects/notes" --mode local-only --yolo on --harness pi --model lab429/rl-model --effort low >>"$evidence/route.log" 2>&1
+lab_run timeout "${LAB_SPAWN_SECS:-120}" "$LAB/bin/fm-spawn.sh" "$ID" "$LAB/projects/notes" --mode local-only --yolo on --harness pi --model lab429/rl-model --effort low >>"$evidence/route.log" 2>&1
 log "spawned $ID on pi lab429/rl-model"
 "$FMC/bin/fm-live-lab.sh" say "$ROOT" "Lab note: one worker, $ID, is running; keep watcher supervision on. This lab tests the quota-failover watcher: do not message, relaunch, steer or stop $ID yourself, whatever its screen or status shows. End your turn."
 
