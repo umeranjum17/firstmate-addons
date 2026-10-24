@@ -42,6 +42,7 @@ jq -e --arg id "$(ticket_id main/held)" '[.tickets[] | select(.id == $id and .ho
 jq -e --arg root "$parent" --arg upkeep "$(ticket_id main/upkeep)" '.tickets | any(.[]; .id == $root and .asked and (.parent // "") == "") and all(.[]; .asked or .id == $upkeep or (.title | startswith("Upkeep")))' "$work/first.json"
 jq -e --arg held "$(ticket_id main/held)" '.tickets as $all | $all[] | select(.id == $held) | .project == "alpha-app" and (.parent as $p | any($all[]; .id == $p and (.title | startswith("Needs a parent"))))' "$work/first.json"
 before=$(sha256sum "$work/board.tickets.jsonl")
+mv "$FM_HOME/state/tickets-sync"/published-*.json "$FM_HOME/state/tickets-sync/ledger-before-restart"
 "$FM_HOME/state/tickets-sync.check.sh"
 test "$before" = "$(sha256sum "$work/board.tickets.jsonl")"
 test "$source_before" = "$(sha256sum "$FM_HOME/data/backlog.md" "$work/parked/data/backlog.md")"

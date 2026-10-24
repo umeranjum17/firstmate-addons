@@ -6,7 +6,5 @@ Backlogs stay read-only: archive headings are normalized in retained copies unde
 Open work and seven days of completed work are backfilled by stable home/item hashes; closed items get 100%, active items 17%, and queued work 0%.
 Parked homes and held items stay On hold; completion clears hold.
 Captain asks are epic roots; `parent: <item id>` confirms hierarchy, `parent: upkeep` alone means System, and unconfirmed items sit under Needs a parent.
-Project names resolve from the clone's origin when available; icons require matching names in the board's project registry.
-Each poll yields after 20 seconds and saves its cursor; remote, capped and unsupported backlogs fail visibly.
+Each poll uses a field-hash ledger and a 20-second cursor budget; `sync.py --audit` runs the full ticket list separately.
 Public titles cap at 160 characters: names may be abbreviated and excess links counted; release/state use the suffix, and existing cards need their producer to set `--ticket`.
-Run `FM_TEST_FORK=<checkout> bash tickets-sync/tests/sync.test.sh` for the real-CLI install, hierarchy, parking, cutoff, idempotency and archive-close journey.
