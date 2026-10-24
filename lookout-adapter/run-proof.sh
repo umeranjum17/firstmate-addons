@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Live proof journey: Lookout shows this fleet's real data. Serves lookout-firstmate on the real home (read-only) on a spare port,
-# points a lookout clone at it on another, and captures the screens the adapter fills at 390 px light and 1440 px dark into
-# $DONE_DONE_EVIDENCE_ROOT, with the document's counts. FM_HOME is the home to read, LOOKOUT_DIR a lookout clone.
+# Live proof journey: Lookout shows this fleet's real data. Serves lookout-firstmate on the real home (read-only) and a lookout clone
+# on spare ports; captures the screens the adapter fills (390 px light, 1440 px dark) as text and PNG into $DONE_DONE_EVIDENCE_ROOT. FM_HOME is the home to read, LOOKOUT_DIR a lookout clone.
 set -Eeuo pipefail
 : "${FM_HOME:?}" "${LOOKOUT_DIR:?}" "${DONE_DONE_EVIDENCE_ROOT:?}"
 here=$(cd "$(dirname "$0")" && pwd)
@@ -36,5 +35,6 @@ for shot in "overview 390 844 light" "lanes 390 844 light" "flow 1440 900 dark" 
   chrome-devtools-axi open "http://127.0.0.1:$lp/?theme=$theme#/$s" >/dev/null
   chrome-devtools-axi resize "$w" "$h" >/dev/null
   chrome-devtools-axi wait updated >/dev/null; sleep 1
+  chrome-devtools-axi eval 'document.body.innerText' >"$DONE_DONE_EVIDENCE_ROOT/$s-$w-$theme.txt"
   chrome-devtools-axi screenshot "$DONE_DONE_EVIDENCE_ROOT/$s-$w-$theme.png" >/dev/null
 done
