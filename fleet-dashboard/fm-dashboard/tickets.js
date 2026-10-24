@@ -78,8 +78,9 @@ const STEP = { queued: 0, building: 17, review: 33, test: 50, ci: 67, merge: 83,
 const pct = (d, t) => t.state === 'done' ? 100 : (c => c ? STEP[c.stage] : { todo: 0, hold: 0, progress: 17, review: t.pr ? 67 : 33 }[t.state])(d.cards.find(x => x.id === t.id))
 const SHOW = { done: ['Done', t => t.state === 'done', 'd'], moving: ['Moving', t => t.state === 'progress' || t.state === 'review', 'm'], todo: ['To do', t => t.state === 'todo', ''], hold: ['On hold', t => t.state === 'hold', 'h'] }
 const weekDone = (ts, back) => ts.filter(t => t.state === 'done' && (s => s >= back * 604800 && s < (back + 1) * 604800)(now() - at(t.updated))).length
-const mine = (all, r) => all.filter(t => (r.kind === 'system') !== !!t.asked && (!r.project.length || r.project.includes(t.project || 'none')) && (!r.release.length || r.release.includes(rel(t))))
-export const ticketsHead = (d, r) => { const ts = mine(d.tickets || [], r), k = f => ts.filter(f).length
+export const proj = (d, t) => t.project || hname(d, t.home)  // a ticket with no project line shows and filters under its lead's home
+const mine = (d, all, r) => all.filter(t => (r.kind === 'system') !== !!t.asked && (!r.project.length || r.project.includes(proj(d, t))) && (!r.release.length || r.release.includes(rel(t))))
+export const ticketsHead = (d, r) => { const ts = mine(d, d.tickets || [], r), k = f => ts.filter(f).length
   return { h: r.kind === 'system' ? 'Where the system work stands' : 'Where your asks stand', sub: `${k(SHOW.done[1])} done, ${k(SHOW.moving[1])} moving, ${k(SHOW.todo[1])} not started, ${k(SHOW.hold[1])} on hold · ${ts.length} tickets` } }
 export const KindSeg = ({ d, r, go, counts }) => html`<div class="kseg" role="group" aria-label="Whose work">${[['', 'Your asks', t => t.asked], ['system', 'System', t => !t.asked]].map(([v, n, f]) =>
   html`<button aria-pressed=${(r.kind || '') === v} onClick=${() => go({ kind: v, ticket: null })}>${n}${counts ? html`<small class="num">${(d.tickets || []).filter(f).length}</small>` : ''}</button>`)}</div>`
@@ -99,12 +100,13 @@ function List({ d, s, name, xs, go, wide, r, cap = wide ? 6 : 3 }) {
     : html`<div class="lane" data-lane=${s}><div class="lh"><h2>${name}</h2><small class="num">${xs.length}</small>${more}</div><div class="soft">${rows}</div></div>`
 }
 function ByProject({ d, ts, go }) {
-  const ps = Object.entries(ts.reduce((m, t) => ((m[t.project || 'none'] ||= []).push(t), m), {})).map(([p, xs]) => [p, xs.length, xs.filter(t => t.state === 'done').length]).sort((a, b) => (b[1] - b[2]) - (a[1] - a[2]) || b[1] - a[1])
+  const ps = Object.entries(ts.reduce((m, t) => ((m[proj(d, t)] ||= []).push(t), m), {})).map(([p, xs]) => [p, xs.length, xs.filter(t => t.state === 'done').length]).sort((a, b) => (b[1] - b[2]) - (a[1] - a[2]) || b[1] - a[1])
   return html`<section class="soft"><div class="lhd"><h2>By project</h2><small class="num">${ps.length}</small></div><div class="grp">${ps.slice(0, 8).map(([p, n, k]) =>
-    html`<${Row} key=${p} onClick=${() => go({ project: [p] })} tile=${html`<${Tile} d=${d} name=${p}/>`} title=${p === 'none' ? 'No project' : p} value=${`${k} of ${n}`} pct=${Math.round(100 * k / n)} note=${`${Math.round(100 * k / n)}%`}/>`)}</div></section>`
+    html`<${Row} key=${p} onClick=${() => go({ project: [p] })} tile=${html`<${Tile} d=${d} name=${p}/>`} title=${p} value=${`${k} of ${n}`} pct=${Math.round(100 * k / n)} note=${`${Math.round(100 * k / n)}%`}/>`)}</div></section>`
 }
 const Tiles = ({ d }) => html`<div class="stats"><a class="soft stat" href="#/needs">${I(LIC.q, 20)}<span>Waiting on you</span><b class="num">${d.asks == null ? '?' : d.asks.length}<small>${d.asks?.length === 1 ? 'question' : 'questions'}</small></b></a>
-  <div class="soft stat">${I(LIC.glass, 20)}<span>Typical start to landed</span><b class="num">${d.cycle_p50 == null ? '–' : dur(d.cycle_p50)}</b></div></div>`
+  <div class="soft stat" title="The median of each recorded merge's time from the task's last dispatch to the merge">${I(LIC.glass, 20)}<span>Typical start to landed</span><b class="num">${d.cycle_p50 == null ? '–' : dur(d.cycle_p50)}</b>
+    ${d.cycle_n ? html`<em>median of ${d.cycle_n} merges, dispatch to merge</em>` : ''}</div></div>`
 // The filters, in one sheet: project, release and whether the list goes by state or by release.
 export function TicketFilter({ d, r, go, label }) {
   const all = d.tickets || [], [open, setOpen] = useState(false), n = r.project.length + r.release.length + !!r.by
@@ -112,11 +114,11 @@ export function TicketFilter({ d, r, go, label }) {
   return html`<div class="anchor"><button class=${label ? 'btn' : 'ib'} aria-expanded=${open} aria-label="Filters" onClick=${() => setOpen(!open)}>${I(IC.filter, label ? 16 : 20)}${label}${n ? html`<b>${n}</b>` : ''}</button>
     ${open && html`<div class="scrim" onClick=${() => setOpen(false)}></div><div class="pop"><div class="pop-h">List</div>${opts('by', [['', 'By state'], ['release', 'By release']])}
       <div class="pop-h">Release</div>${opts('release', [...new Set(all.map(rel))].sort((a, b) => relRank(a) - relRank(b) || nat(a, b)).map(v => [v, cap(v), all.filter(t => rel(t) === v).length]))}
-      <div class="pop-h">Project</div>${opts('project', [...new Set(all.map(t => t.project || 'none'))].sort().map(p => [p, p === 'none' ? 'No project' : p, all.filter(t => (t.project || 'none') === p).length]))}</div>`}</div>`
+      <div class="pop-h">Project</div>${opts('project', [...new Set(all.map(t => proj(d, t)))].sort().map(p => [p, p, all.filter(t => proj(d, t) === p).length]))}</div>`}</div>`
 }
 
 export function Tickets({ d, r, go, wide }) {
-  const all = d.tickets || [], unread = d.tickets_unread || [], lane = laneOf(all.filter(t => t.state !== 'done')), ts = mine(all, r), show = SHOW[r.show] ? r.show : 'moving'
+  const all = d.tickets || [], unread = d.tickets_unread || [], lane = laneOf(all.filter(t => t.state !== 'done')), ts = mine(d, all, r), show = SHOW[r.show] ? r.show : 'moving'
   const lists = r.by ? LANES.map(([s, name]) => [s, name, order(s, ts.filter(t => t.state !== 'done' && lane(t) === s))]) : [[show, SHOW[show][0], order(show, ts.filter(SHOW[show][1]))]]
   const page = r.ticket && all.find(t => t.id === r.ticket)
   const body = lists.map(([s, name, xs]) => html`<${List} key=${s} d=${d} s=${s} name=${name} xs=${xs} go=${go} wide=${wide} r=${r}/>`)

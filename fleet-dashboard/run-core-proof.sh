@@ -70,6 +70,7 @@ EOF
   # m-ci's completion receipt and the done-done verdict on its merge card: the ticket page's Proof.
   printf '{"schema":1,"task":"m-ci","head":"abc1234def5678","verdict":"PASS","at":%s}\n' "$((now - 300))" > "$home/state/m-ci.run-receipt.json"
   mkdir -p "$home/data/m-ci" && printf '{"head":"abc1234def5678","verdict":"pass"}\n' > "$home/data/m-ci/merge-card.json"
+  mkdir -p "$home/projects/beta/.git" && printf '[remote "origin"]\n\turl = git@github.com:acme/beta-app.git\n' > "$home/projects/beta/.git/config"  # its clone's origin names the project
   lane m-ci ship "paused [at=$((now - 1200))]: waiting for CI checks https://github.com/acme/alpha/pull/9"
   lane m-stuck ship "blocked [at=$((now - 7200))]: cannot reach the build server"
   lane m-ask ship "needs-decision [at=$((now - 3600))] [key=scope]: which layout"
@@ -225,7 +226,7 @@ grep -qF 'Fleet dashboard' "$DONE_DONE_EVIDENCE_ROOT/landing-390.txt" || { echo 
 # Tickets: the backlog mapped to board columns, and only the ask list waits on the captain; a Board card drops tags and Main refs too.
 jq -e '([.tickets[] | {(.task): .state}] | add) as $s | ([.tickets[] | {(.task): .}] | add) as $t
   | $s["m-build"] == "progress" and $s["m-ci"] == "review" and $s["m-held"] == "hold" and $s["m-ready"] == "todo" and $s["m-shipped"] == "done"
-  and $t["m-ready"].priority == 1 and $t["m-ready"].release == "next" and $t["m-ready"].project == "beta" and $t["m-build"].release == "v0.2.0" and $t["m-ci"].release == "later"
+  and $t["m-ready"].priority == 1 and $t["m-ready"].release == "next" and $t["m-ready"].project == "beta-app" and $t["m-build"].release == "v0.2.0" and $t["m-ci"].release == "later"
   and $t["m-ask"].asked and $t["m-ask"].title == "Choose the layout for the new screen" and $t["m-ask"].priority == 0
   and ([.cards[] | select(.task == "m-ask")][0].title == "Choose the layout for the new screen")
   and $t["m-shipped"].pr == "https://github.com/acme/alpha/pull/4" and all(.tickets[]; .state != "captain") and (.asks | length) == 1' \

@@ -5,7 +5,7 @@ import { html } from './ui.js'
 // Each project's own icon, copied from its repo into icons/ (a project that ships none shows its monogram).
 const ICONS = { byokit: 'byokit.svg', crewhouse: 'crewhouse.png', desklink: ['desklink.svg', '6% 50%'], 'done-done': 'done-done.svg', 'first-draft': 'first-draft.svg',
   firstmate: 'firstmate.svg', 'firstmate-fork': 'firstmate.svg', 'firstmate-addons': 'firstmate-addons.svg', 'herdr-runtime': 'herdr-runtime.svg',
-  'learn-from-mistakes': 'learn-from-mistakes.svg', 'muxr-cloud': 'muxr-cloud.svg', pockit: 'pockit.png', takeone: 'takeone.png', ownvoice: 'ownvoice.png', 'sign-off': 'sign-off.svg' }
+  'learn-from-mistakes': 'learn-from-mistakes.svg', 'muxr-cloud': 'muxr-cloud.svg', muxr: 'pockit.png', pockit: 'pockit.png', takeone: 'takeone.png', ownvoice: 'ownvoice.png', 'sign-off': 'sign-off.svg' }
 // A home shows the project most of its tickets belong to; Main is Firstmate's own home.
 const homeOf = new WeakMap()
 function homeProject(d, h) {

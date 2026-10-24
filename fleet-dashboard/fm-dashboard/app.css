@@ -228,7 +228,7 @@ a.pill:hover{background:var(--hover)}
 .dock a[aria-current=page]{width:112px;background:var(--sel);color:var(--ink);box-shadow:var(--edge)}
 :root[data-theme=dark] .dock a[aria-current=page]{background:var(--tile)}
 .dock a[aria-current=page] span{display:inline}
-.dock a .badge{position:absolute;top:8px;right:8px;margin:0;min-width:0;width:8px;height:8px;padding:0;font-size:0;box-shadow:0 0 0 2px var(--card)}
+.dock a .badge{display:block;position:absolute;top:8px;right:8px;margin:0;min-width:0;width:8px;height:8px;padding:0;font-size:0;box-shadow:0 0 0 2px var(--card)}
 .dock>button{width:56px;height:56px;border-radius:28px;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;box-shadow:var(--float)}
 /* --- tablet layout --- */
 @media (max-width:1279px){
@@ -485,3 +485,4 @@ button.ov-arow:hover{background:var(--hover)}.ov-arow.ov-abn{background:var(--ra
 .hwide .stat{background:none;box-shadow:none;border-radius:0;padding:16px 0}.hwide .stat+.stat{box-shadow:0 -1px 0 var(--line)}
 .kgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start;margin-top:16px}
 .k8{grid-column:span 8}.k4{grid-column:span 4}.k12{grid-column:span 12}
+.nav[aria-pressed=true]{background:var(--card);box-shadow:var(--edge);color:var(--ink)}
