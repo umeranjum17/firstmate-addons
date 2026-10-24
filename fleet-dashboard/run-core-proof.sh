@@ -19,7 +19,7 @@ srv_pid=
 cleanup() {
   CHROME_DEVTOOLS_AXI_SESSION=$session chrome-devtools-axi stop >/dev/null 2>&1 || true
   env -u TMUX TMUX_TMPDIR="$home/tmux" tmux kill-server 2>/dev/null || true
-  [ -z "$srv_pid" ] || kill "$srv_pid" 2>/dev/null || true
+  [ -z "$srv_pid" ] || { pkill -P "$srv_pid"; kill "$srv_pid"; } 2>/dev/null || true  # the server is the backgrounded shell's child
   rm -rf -- "$home"
 }
 trap cleanup EXIT
