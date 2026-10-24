@@ -19,3 +19,9 @@ cp "$repo/wait-timers/tests/fm-wait-timers.test.sh" "$d/fork/tests/"
   (cd "$d/fork" && env -u FM_TASK_ID FM_HOME="$d/fork" FM_ADDONS_DIR="$d/addons" HOME="$d/user" TMPDIR="$d/tmp" bash tests/fm-wait-timers.test.sh)
 } 2>&1 | tee "$evidence/wait-timers-identity.txt"
 test "${PIPESTATUS[0]}" -eq 0
+cat > "$evidence/steps.json" <<'J'
+{"target":{"version":"firstmate bin/fm-watch.sh from a read-only fork checkout, with this add-on's wait-timers library"},
+ "start":"a disposable firstmate home whose lane has two open decisions, one without an [at=] stamp, and an unkeyed blocker",
+ "steps":["run the real watcher over the add-on library until the wait is overdue and read the id and source in the escalation","resolve one decision, add a working line, and read which wait stays open and its new identity","resolve the last decision and add an unkeyed blocker and read its identity"],
+ "result":"escalations print id=<home/task/generation/key> and the exact source; a resolution closes only its own wait; a later working line closes nothing; the transcript ends with ok"}
+J
