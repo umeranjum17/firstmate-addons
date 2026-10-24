@@ -23,6 +23,7 @@ cat > "$t/home/state/dashboard/board.json" <<J
 {"homes":[{"id":"alpha","name":"Alpha"}],"tickets":[{"id":"alpha/a-one","project":"alpha-app"}],
  "cards":[{"id":"alpha/a-one","home":"alpha","title":"First lane\n... (truncated)","stage":"ci","state":"waiting","since":$((now-100)),"started":$((now-900)),"pr":"https://github.com/o/r/pull/1","wait":"CI"},
           {"id":"alpha/a-two","home":"alpha","title":"Second","stage":"building","state":"blocked","since":$((now-50)),"started":null,"pr":null,"wait":null},
+          {"id":"alpha/backlog-item","home":"alpha","title":"Ready item","stage":"queued","state":"queued","since":$now,"pr":null},
           {"id":"ghost/x","home":"ghost","title":"Unknown home","stage":"queued","state":"queued","since":$now,"pr":null}],
  "flow":{"lanes":[{"home":"alpha","task":"a-one","display_title":"Merged one","pr":"https://github.com/o/r/pull/1","times":{"merged":$((now-7200)),"dispatched":$((now-9000))}},
                   {"home":"alpha","task":"old","pr":"https://github.com/o/r/pull/0","times":{"merged":$((now-40*86400))}}]}}

@@ -111,7 +111,7 @@ def build_fleet(home, build=True, proc='/proc'):
     known = {h['id'] for h in homes}
     lanes, cards = [], {}
     for c in board.get('cards', []):
-        if c['home'] not in known or c['id'] in cards:
+        if c['home'] not in known or c['id'] in cards or c['stage'] == 'queued':  # a ready backlog item holds no lane
             continue
         lane = {'id': c['id'], 'home': c['home'], 'title': c['title'].split('\n')[0], 'project': projects.get(c['id']) or c['home'], 'stage': STAGES.get(c['stage'], 'queued'),
                 'stuck': c['state'] == 'blocked', 'started_at': iso(c.get('started') or c['since']), 'updated_at': iso(c['since'])}
