@@ -189,7 +189,11 @@ a.pill:hover{background:var(--hover)}
 .pal .in input::placeholder{color:var(--ink-4)}
 .pal .res{max-height:min(64vh,520px);overflow:auto;padding:0 16px 16px}.pal .lh{margin:16px 0 8px}
 .pal .grp .trow{padding:8px 16px}.pal .grp .tile{width:32px;height:32px;border-radius:8px}
-.pal .rx kbd{border:0;background:var(--tile)}.pal .in .ib{background:none;box-shadow:none}
+.pal .rx kbd{border:0;background:var(--tile)}
+.ask .ahd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--ink-3)}.ask .words p{margin-top:8px;font-size:14px;line-height:20px}
+.ask .opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.ask .opts span{height:32px;padding:0 12px;border-radius:16px;background:var(--tile);font-size:13px;line-height:32px;color:var(--ink-2)}
+.ask .opts .on{background:var(--acc);color:var(--on-acc)}.ask .gbtn{margin-top:16px;align-self:flex-start}.ask .tcol{max-width:720px;display:flex;flex-direction:column;gap:8px}
+.pos{font-size:13px;color:var(--ink-3);white-space:nowrap}.tbar .pos{flex:none}.pal .in .ib{background:none;box-shadow:none}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;padding:8px 16px 16px;color:var(--ink-2)}
 
 /* --- needs you: Linear's inbox --- */
