@@ -38,7 +38,8 @@ def icon_problem(image):
         try: root = xml.parse(image).getroot()
         except xml.ParseError as error: return f'not valid XML ({error})'
         return None if root.tag in ('svg', '{http://www.w3.org/2000/svg}svg') else 'not an svg root'
-    r = sp.run(['identify', '-format', '%m %w %h', str(image) + '[0]'], text=True, capture_output=True, timeout=60)
+    try: r = sp.run(['identify', '-format', '%m %w %h', str(image) + '[0]'], text=True, capture_output=True, timeout=60)
+    except FileNotFoundError: return 'ImageMagick identify is not installed'
     kind, _, size = r.stdout.partition(' ')
     return None if r.returncode == 0 and kind in ('PNG', 'JPEG', 'WEBP') and all(int(n) > 0 for n in size.split()) else 'not a readable ' + image.suffix[1:] + ' image'
 
