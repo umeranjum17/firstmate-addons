@@ -6,7 +6,9 @@
 # The seed is the only home read: no real fleet, no credentials, no live writes.
 # FM_BIN names the Firstmate bin/ whose helper scripts the build runs (default: ~/firstmate/bin); the
 # queue reasons come from this checkout's fleet-flow reader, which the build reaches through FM_ADDONS_DIR.
-set -euo pipefail
+set -Eeuo pipefail
+# A browser step that times out stops the run under set -e; name it so a failed run says where.
+trap 'echo "run-core-proof: stopped at line $LINENO: $BASH_COMMAND" >&2' ERR
 : "${DONE_DONE_EVIDENCE_ROOT:?}"
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/.." && pwd)
@@ -139,6 +141,8 @@ done
 [ -n "$url" ] || { cat "$home/serve.log" >&2; exit 1; }
 
 export CHROME_DEVTOOLS_AXI_SESSION=$session
+# a new session can start with its one blank tab unselected, and open then has no page to drive
+chrome-devtools-axi selectpage 1 >/dev/null 2>&1 || true
 chrome-devtools-axi open "$url#/board" >/dev/null
 chrome-devtools-axi resize 390 844 >/dev/null
 chrome-devtools-axi wait "m-stuck" >/dev/null
