@@ -53,5 +53,10 @@ for role in review test fix; do
     fails=$((fails + 1))
 done
 sed -i "s|$HOME|~|g" "$evidence"/*.txt "$evidence/wrapper.log"
+jq -n --arg v "$(git -C "$repo" rev-parse --short HEAD)" --rawfile roles "$evidence/roles.txt" '{target: {version: $v},
+  start: "the pipeline wrapper on its default route, Claude Haiku through claude-bridge, with the real Claude account pool",
+  steps: ["send a review prompt, a test prompt and a fix prompt the way the pipeline calls pi",
+    "each call first lands on an account that answers a Claude rate limit"],
+  result: ("each role moved to the next account on the same route and answered on Claude Haiku: " + $roles)}' >"$evidence/steps.json"
 [ "$fails" = 0 ] || { echo "FAIL: $fails role(s) did not recover" | tee -a "$evidence/roles.txt"; exit 1; }
 echo "PASS: review, test and fix each moved off a limited account and answered on Claude Haiku" | tee -a "$evidence/roles.txt"
