@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Retire the quota-failover watcher from one firstmate home (its check and trust binding); with --all, from every
-# active home install.sh --all reaches, and then remove the installed copy. Idempotent.
+# Retire the watcher's check and trust from a home, or with --all from every home install.sh --all reaches and remove the copy.
 # Usage: uninstall.sh [--all] <fm-home>
 set -euo pipefail
 ALL=

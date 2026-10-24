@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Install or update the quota-failover watcher for this user and point a firstmate home's
-# state/quota-failover-watch.check.sh at it through an exec shim, backing up a replaced check first, then register it.
-# --all reconciles every active home from <fm-home>: the home itself and each local secondmate home its
-# data/secondmates.md lists, minus the ones its config/parked-homes parks; a remote home is skipped and named.
-# --list prints the homes it would reach, one "<name><TAB><dir>" line each, and writes nothing. Idempotent.
+# Install the quota-failover watcher for this user and register an exec shim to it as a home's quota-failover-watch
+# check (a different check is backed up first). --all: the home and each local, unparked home its data/secondmates.md
+# lists (a remote one is named and skipped); --list prints those homes and writes nothing. Idempotent.
 # Usage: install.sh [--dry-run] [--all] [--list] <fm-home>
 set -euo pipefail
 DRY=0 ALL=0 LIST=0

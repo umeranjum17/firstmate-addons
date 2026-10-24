@@ -178,8 +178,7 @@ pool a1 claude claude-opus-4-8 c1
 pool d1 claude claude-opus-4-8 c2
 pool g1 opencode opencode-go/mimo-v2.6-flash go1
 pool x1 codex gpt-5.5-codex cx1
-# The pool's ambient answer for a tool it does not pool: no account to move or
-# rest, so the worker takes the route move (the 23 Oct live stop).
+# The pool's "ambient" id for a tool it does not pool: nothing to move or rest, so it takes the route move.
 pool y1 codex gpt-5.5-codex ambient
 pooll=$home/state/pool.log wake=$home/state/quota-failover.wake
 

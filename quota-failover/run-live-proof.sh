@@ -74,3 +74,8 @@ cp "$LAB/state/$ID.status" "$evidence/worker-status.txt"
 grep "^harness=\|^model=" "$LAB/state/$ID.meta" >"$evidence/worker-route-after.txt"
 grep -q '^done' "$evidence/worker-status.txt" || { log "FAIL: the worker did not finish on its new route"; exit 1; }
 log "PASS: $ID finished on $(paste -sd' ' "$evidence/worker-route-after.txt") with no human step"
+jq -n --arg v "$(git -C "$repo" rev-parse --short HEAD)" --arg moved "$(grep "$ID: switched" "$evidence/quota-failover.log" | tail -n 1)" \
+  '{target: {version: $v}, start: "a disposable live lab home with a Claude Haiku main and no quota-failover watcher",
+    steps: ["install the quota-failover watcher into the lab home with one command (quota-failover/install.sh)",
+      "spawn one real worker on pi pinned to a local route that answers every call with HTTP 429", "wait, with no human step"],
+    result: ("the worker stopped on the real HTTP 429 rate limit; the watcher moved it to Claude Haiku and it finished there: " + $moved)}' >"$evidence/steps.json"
