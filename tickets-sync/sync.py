@@ -90,7 +90,9 @@ def sync():
         if resume.get('home') in homes: ordered = ordered[list(homes).index(resume['home']):]
         changed = gaps = 0
         registry = {p['name'].lower(): p.get('icon', {}).get('sha256') for p in json.loads(run(['sign-off-axi', 'project', str(board), '--json'])).get('projects', [])}
-        skipped = {}
+        skip_file = state / 'icons-skipped.json'
+        skipped = json.loads(skip_file.read_text()) if skip_file.exists() else {}
+        tried = set()
         def save(path, value):
             temp = path.with_suffix('.tmp'); temp.write_text(json.dumps(value)); temp.replace(path)
         def publish(tid, desired):
@@ -160,7 +162,11 @@ def sync():
                     origin = run(['git', '-C', str(clone), 'remote', 'get-url', 'origin']).strip() if (clone / '.git').exists() else repo
                     projects[repo] = origin.rstrip('/').split('/')[-1].removesuffix('.git')
                 project = projects[repo]
-                if project not in skipped: skipped[project] = register_icon(board, project, registry)
+                if project not in tried:
+                    tried.add(project); reason = register_icon(board, project, registry)
+                    if reason != skipped.get(project):
+                        skipped.pop(project, None) if reason is None else skipped.__setitem__(project, reason)
+                        save(skip_file, skipped); print(f'tickets-sync: {project} icon ' + (f'skipped ({reason})' if reason else 'registered'))
                 parent = '' if epic else field('parent')
                 if parent in tasks and ticket_id(name, parent) not in ledger:
                     required.add(parent); ids.append(parent)
@@ -172,10 +178,6 @@ def sync():
                 desired = dict(title=title, progress=progress, parent=ticket_id(name, parent) if parent else '', priority=f"P{r['priority']}" if str(r.get('priority')) in ('0', '1', '2', '3') else '', project=project, hold='yes' if held and not done else 'no', asked='no' if upkeep else 'yes')
                 publish(tid, desired)
         save(cursor, {})
-        report = '; '.join(f'{k} ({v})' for k, v in sorted(skipped.items()) if v)
-        listing = state / 'icons-skipped.txt'
-        if report != (listing.read_text() if listing.exists() else ''):
-            listing.write_text(report); print(f'tickets-sync: no icon registered for {report or "none now"}')
         if changed: print(f'tickets-sync: {len(homes)} homes read; {changed} tickets changed; {gaps} links exceed the public title limit')
 
 if __name__ == '__main__':

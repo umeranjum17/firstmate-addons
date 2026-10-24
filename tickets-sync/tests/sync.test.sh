@@ -35,7 +35,8 @@ test ! -d "$XDG_DATA_HOME/fm-tickets-sync"
 bash "$root/tickets-sync/install.sh"
 printf 'not an image' > "$XDG_DATA_HOME/fm-tickets-sync/fleet-dashboard/fm-dashboard/icons/takeone.png"
 env -u FM_HOME "$FM_HOME/state/tickets-sync.check.sh" | tee "$work/first.out"
-grep -q "no icon registered for alpha-app (no local image); beta (no local image); takeone (not a readable png image)" "$work/first.out"
+grep -q "^tickets-sync: alpha-app icon skipped (no local image)" "$work/first.out"
+grep -q "^tickets-sync: takeone icon skipped (not a readable png image)" "$work/first.out"
 ticket_id() { printf 'fm-%s\n' "$(printf '%s' "$1" | sha256sum | cut -c1-32)"; }
 child=$(ticket_id main/child) parent=$(ticket_id main/parent) parked=$(ticket_id parked/parent)
 sign-off-axi ticket "$work/board.json" --json > "$work/first.json" || { cat "$work/first.json"; exit 1; }
