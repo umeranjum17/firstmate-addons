@@ -7,6 +7,8 @@ description: Verify firstmate-addons changes through their executable integratio
 
 ## Feature map
 
+- Tickets sync: run `FM_TEST_FORK=<checkout> bash tickets-sync/tests/sync.test.sh` for the installed check against real tasks-axi and sign-off-axi, proving idempotency, parking, epic links and archive close-on-done.
+  For authorized fleet backfill, open a done-done run, run a temporary install against a fixture home whose registry names the real backlog homes, and capture the owner board Tickets tab with `chrome-devtools-axi` at 390 and 1280 widths; record source counts, repeat writes and read-only backlog hashes, inspect both shots, then seal and judge the run on the pool account.
 - Lavish publication refusal (secondmate notes and merge-card posts only): run `bash owner-rules/tests/no-lavish.test.sh`; the executable checker and note hook refuse Lavish and accept sign-off links, and the real sign-off writer receives only the clean card on an isolated board.
   Set `FM_TEST_FORK=<Firstmate checkout>` to also prove the real secondmate helper writes no refused status line; raw status appends, report files and commands are outside this check.
   Capture the real publishing commands with `FM_PROOF_FORK=<Firstmate checkout> done-done run owner-rules-publication`; this records the actual refusals, absent status, unchanged board, and clean sign-off posts.

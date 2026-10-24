@@ -2,6 +2,8 @@ app: firstmate-addons
 journeys:
   owner-rules-hierarchy:
     command: bash owner-rules/run-hierarchy-proof.sh
+  tickets-sync:
+    command: python3 tickets-sync/sync.py
   owner-rules-publication:
     command: bash owner-rules/run-proof.sh
   fleet-pulse-chat-tsv-refresh:
