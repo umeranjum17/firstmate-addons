@@ -16,11 +16,13 @@ printf 'parked\n' > "$FM_HOME/config/parked-homes"
 printf '[markdown]\npath="data/backlog.md"\narchive="data/done-archive.md"\ndone_keep=0\n' > "$FM_HOME/.tasks.toml"
 cp "$FM_HOME/.tasks.toml" "$work/parked/.tasks.toml"
 (cd "$FM_HOME"; tasks-axi add parent '[captain-ask] Umer release' --repo alpha --priority 1 >/dev/null
+ tasks-axi 'done' parent --no-prune >/dev/null
  tasks-axi add long "Umer 🚢 $(printf 'long title %.0s' {1..30})" --repo alpha --priority 1 --body $'release: next\nhttps://github.com/example/alpha/pull/123\nhttps://github.com/example/alpha/pull/456' >/dev/null
  tasks-axi add upkeep 'Umer maintenance' --repo alpha --priority 2 --body 'parent: upkeep' >/dev/null
  tasks-axi add held 'Umer paused item' --repo alpha --priority 1 --body 'parent: missing' >/dev/null
  tasks-axi hold held --reason 'Umer parked this item' --kind parked >/dev/null
  tasks-axi add child 'Umer settings' --repo alpha --priority 0 --body $'release: next\nparent: parent' >/dev/null)
+sed -i "/^- \[x\] parent /s/$(date +%F)/2000-01-01/g" "$FM_HOME/data/backlog.md"
 (cd "$work/parked"; tasks-axi add parent 'Umer paused project' --repo beta --priority 2 >/dev/null)
 printf '\n## Done\n- [x] recent - Umer shipped feature (repo: alpha) (done %s)\n- [x] old - Umer historical work (repo: alpha) (done 2000-01-01)\n' "$(date +%F)" >> "$FM_HOME/data/backlog.md"
 git init -q "$FM_HOME/projects/alpha"
