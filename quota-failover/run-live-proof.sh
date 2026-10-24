@@ -47,15 +47,15 @@ printf 'root = "%s"\n' "$ROOT/treehouse" >"$LAB/projects/notes/treehouse.toml"
 printf '# Projects\n\n- notes [local-only +yolo] - tiny lab notes library\n' >"$LAB/data/projects.md"
 printf '{"rules":[{"when":"Lab work on the notes project.","use":[{"harness":"pi","model":"lab429/rl-model","effort":"low"},{"harness":"claude","model":"claude-haiku-5-5","effort":"low"}]}],"default":[{"harness":"claude","model":"claude-haiku-5-5","effort":"low"}]}\n' >"$LAB/config/crew-dispatch.json"
 # shellcheck disable=SC2016 # "$1" belongs to the hook it writes
-printf '#!/bin/sh\nprintf "export PI_CODING_AGENT_DIR=%%s\\n" %q >"$1"\n' "$work/pi-agent" >"$LAB/config/launch-env-hook"
-chmod +x "$LAB/config/launch-env-hook"
+printf '#!/bin/sh\nprintf "export PI_CODING_AGENT_DIR=%%s\\n" %q >"$1"\n' "$work/pi-agent" >"$LAB/config/launch-env-hook" && chmod +x "$LAB/config/launch-env-hook"
 XDG_DATA_HOME=$ROOT/xdg "$repo/quota-failover/install.sh" "$LAB" | tee -a "$evidence/route.log"
 
 lab_run "$LAB/bin/fm-brief.sh" "$ID" notes --mode local-only >/dev/null
 sed -i 's|{TASK}|Add count_notes(), which returns how many notes are stored, to notes/__init__.py.|; s|{FIRSTMATE_SPEC}|Implement count_notes(), commit, and report done. Nothing else is in scope.|' "$LAB/data/$ID/brief.md"
 lab_run "$LAB/bin/fm-tasks-axi.sh" add "$ID" "lab worker on a rate-limited route" --kind ship --repo notes --priority 3 >/dev/null
 lab_run timeout "${LAB_SPAWN_SECS:-120}" "$LAB/bin/fm-spawn.sh" "$ID" "$LAB/projects/notes" --mode local-only --yolo on --harness pi --model lab429/rl-model --effort low >>"$evidence/route.log" 2>&1
-log "spawned $ID on pi lab429/rl-model"
+# The move lands on Claude: trust the lab worktree as a Claude spawn does (lab down removes every entry under the lab).
+wt=$(sed -n "s/^spawned $ID .* worktree=//p" "$evidence/route.log") && lab_run "$LAB/bin/fm-claude-trust.sh" "$wt" "$LAB/projects/notes"
 "$FMC/bin/fm-live-lab.sh" say "$ROOT" "Lab note: one worker, $ID, is running; keep watcher supervision on. This lab tests the quota-failover watcher: do not message, relaunch, steer or stop $ID yourself, whatever its screen or status shows. End your turn."
 
 end=$(($(date +%s) + wait)) qlog=$LAB/state/quota-failover.log
