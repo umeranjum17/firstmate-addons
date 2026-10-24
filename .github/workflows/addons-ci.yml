@@ -196,3 +196,6 @@ jobs:
       # Fixture home: fleet JSON for Lookout from the builder's output files; no real home is read.
       - name: Lookout adapter test
         run: bash lookout-adapter/tests/test.sh
+      # Stub upstream and fixture url file; install.sh only in --dry-run, so no unit is touched.
+      - name: Lookout front and install dry-run test
+        run: bash lookout-adapter/tests/front.test.sh
