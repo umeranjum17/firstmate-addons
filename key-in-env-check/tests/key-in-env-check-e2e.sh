@@ -9,7 +9,7 @@ bin=${KEY_IN_ENV_BIN:-$here/../key-in-env-check}
 [ -x "$bin" ] || { echo "not ok - $bin is missing"; exit 1; }
 work=$(mktemp -d) || exit 1
 pids=()
-# shellcheck disable=SC2329 # runs through the EXIT trap
+# shellcheck disable=SC2317,SC2329 # runs through the EXIT trap
 cleanup() { # only the fixture processes this test started: their children first, then the roots
   for p in "${pids[@]}"; do pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; done
   rm -rf -- "$work"
