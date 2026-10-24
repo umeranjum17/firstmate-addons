@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# limit-prompt-move live proof: the INSTALLED limit-prompt-move runs against a real tmux pane that shows a
+# captured Claude usage-limit menu (tests/weekly-limit-menu.screen). The pane reads one key like Claude's menu
+# does; fm-control is a stub that sends the interrupt as a real Escape key to that pane and records the
+# relaunch; the pool tool is a stub that answers a fixed pick. No real account, login or Claude is touched.
+# Captures: the pane before, the tool's own output (log, status, the key sent, the pool lib it loaded), the pane after.
+set -euo pipefail
+repo=$(cd "$(dirname "$0")/.." && pwd)
+evidence=${DONE_DONE_EVIDENCE_ROOT:?}
+tmp=$(mktemp -d)
+sock=lpm-live-$$
+trap 'tmux -L "$sock" kill-server 2>/dev/null || true; rm -rf -- "$tmp"' EXIT
+home=$tmp/home S=$tmp/home/state
+mkdir -p "$S" "$home/config" "$home/bin" "$tmp/pool/pa_most_room"
+export TMUX_SOCK=$sock FM_HOME=$home
+printf '#!/bin/sh\n' >"$home/bin/fm-check-register.sh"; chmod +x "$home/bin/fm-check-register.sh"
+printf 'fm_run_timed() { shift; "$@"; }\n' >"$home/bin/fm-timeout-lib.sh"
+cat >"$home/bin/fm-backend.sh" <<'LIB'
+fm_meta_get() { [ -f "$1" ] || return 0; sed -n "s|^$2=||p" "$1" | tail -n 1; }
+fm_backend_of_meta() { echo tmux; }; fm_backend_target_of_meta() { fm_meta_get "$1" endpoint_task_id; }
+fm_backend_visible_capture() { tmux -L "$TMUX_SOCK" capture-pane -p -t "$2"; }
+LIB
+cat >"$home/bin/fm-control.sh" <<'CTL'
+#!/usr/bin/env bash
+case $2 in
+  interrupt) tmux -L "$TMUX_SOCK" send-keys -t lead Escape; echo "fm-control $1 interrupt: sent key Escape to the pane" >>"$FM_HOME/state/control.log" ;;
+  relaunch) echo "fm-control $1 relaunch --account $4" >>"$FM_HOME/state/control.log"; echo "$4" >"$FM_HOME/state/relaunched"; printf "account=%s\nspawn_gen=s2\n" "$4" >>"$FM_HOME/state/$1.meta" ;;
+esac
+CTL
+chmod +x "$home/bin/fm-control.sh"
+cat >"$tmp/byokit-accounts" <<EOF2
+#!/usr/bin/env bash
+printf '{"ok":true,"id":"pa_most_room","set":{"CLAUDE_CONFIG_DIR":"$tmp/pool/pa_most_room"},"unset":[]}\n'
+EOF2
+chmod +x "$tmp/byokit-accounts"
+printf 'state=%s\ncommand=%s\n' "$tmp/pool" "$tmp/byokit-accounts" >"$home/config/account-pool"
+printf 'endpoint_task_id=lead\nkind=secondmate\nharness=claude\nspawn_gen=s1\n' >"$S/muxr-lead.meta"
+cat >"$tmp/pane.sh" <<PANE
+#!/usr/bin/env bash
+cat '$repo/limit-prompt-move/tests/weekly-limit-menu.screen'
+IFS= read -rsn1 k
+[ "\$k" = \$'\e' ] && echo '[pane] Escape received: menu cancelled, no option chosen'
+while [ ! -f '$S/relaunched' ]; do sleep 0.2; done
+echo "[pane] claude relaunched on account \$(cat '$S/relaunched')"; sleep 30
+PANE
+tmux -L "$sock" new-session -d -s lead -x 100 -y 60 "bash $tmp/pane.sh"
+sleep 1
+scrub() { sed "s|$tmp|\$TMP|g"; }
+tmux -L "$sock" capture-pane -p -t lead | scrub >"$evidence/1-limit-screen-before.txt"
+
+XDG_DATA_HOME=$tmp/share "$repo/limit-prompt-move/install.sh" "$home" >/dev/null
+tool=$tmp/share/fm-limit-prompt-move/limit-prompt-move/limit-prompt-move
+bash -x "$tool" "$home" 2>"$tmp/trace" || true
+sleep 1
+{
+  echo "# the installed tool: $(echo "$tool" | scrub)"
+  echo "# pool lib it loaded:"; grep -m1 -E '^\++ \. .*account-pool/bin/fm-account-pool-lib\.sh' "$tmp/trace" | scrub
+  echo "# state/limit-prompt-move.log:"; cat "$S/limit-prompt-move.log"
+  echo "# state/muxr-lead.status:"; cat "$S/muxr-lead.status"
+  echo "# keys and calls sent through fm-control:"; cat "$S/control.log"
+} >"$evidence/2-tool-output.txt"
+tmux -L "$sock" capture-pane -p -t lead | grep . | scrub >"$evidence/3-pane-after.txt"
+grep -q 'moved off its unrecorded account to account pa_most_room' "$evidence/2-tool-output.txt" \
+  && grep -q 'account-pool/bin/fm-account-pool-lib.sh' "$evidence/2-tool-output.txt" \
+  && grep -q 'relaunched on account pa_most_room' "$evidence/3-pane-after.txt" || { echo "FAIL limit-prompt-move live" >&2; exit 1; }
+echo "PASS limit-prompt-move live"
