@@ -52,21 +52,24 @@ sleep 30
 PANE
 tmux -L "$sock" new-session -d -s lead -x 100 -y 50 "bash $tmp/pane.sh"
 sleep 1
-scrub() { sed "s|$tmp|\$TMP|g"; }
-tmux -L "$sock" capture-pane -p -t lead | cat -s | scrub >"$evidence/1-limit-screen-before.txt"
+{ echo "BEFORE: a Claude lead pane sitting on the usage-limit menu; options 1, 2 and 3 are visible and option 1 is highlighted"
+  tmux -L "$sock" capture-pane -p -t lead | cat -s; } >"$evidence/1-limit-screen-before.txt"
 
 XDG_DATA_HOME=$tmp/share "$repo/limit-prompt-move/install.sh" "$home" >/dev/null
 tool=$tmp/share/fm-limit-prompt-move/limit-prompt-move/limit-prompt-move
 bash -x "$tool" "$home" 2>"$tmp/trace" || true
 sleep 1
 {
-  echo "# the installed tool: $(echo "$tool" | scrub)"
-  echo "# pool lib it loaded:"; grep -m1 -E '^\++ \. .*account-pool/bin/fm-account-pool-lib\.sh' "$tmp/trace" | scrub
+  echo "TOOL OUTPUT: limit-prompt-move detected that menu, interrupted the lead with Escape and relaunched it on pool account pa_most_room"
+  echo "pool library loaded from the account-pool add-on, not the Firstmate bin/:"
+  grep -m1 -E '^\++ \. .*account-pool/bin/fm-account-pool-lib\.sh' "$tmp/trace" | sed 's/^+* \. //'
+  echo "the installed tool: $tool"
   echo "# state/limit-prompt-move.log:"; cat "$S/limit-prompt-move.log"
   echo "# state/muxr-lead.status:"; cat "$S/muxr-lead.status"
   echo "# keys and calls sent through fm-control:"; cat "$S/control.log"
 } >"$evidence/2-tool-output.txt"
-tmux -L "$sock" capture-pane -p -t lead | grep . | scrub >"$evidence/3-pane-after.txt"
+{ echo "AFTER: the same lead relaunched on pa_most_room, the menu gone"
+  tmux -L "$sock" capture-pane -p -t lead | grep .; } >"$evidence/3-pane-after.txt"
 grep -q 'moved off its unrecorded account to account pa_most_room' "$evidence/2-tool-output.txt" \
   && grep -q 'account-pool/bin/fm-account-pool-lib.sh' "$evidence/2-tool-output.txt" \
   && grep -q 'now on account pa_most_room' "$evidence/3-pane-after.txt" || { echo "FAIL limit-prompt-move live" >&2; exit 1; }
