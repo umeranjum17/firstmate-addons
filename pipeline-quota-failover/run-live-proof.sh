@@ -14,26 +14,35 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$evidence" "$work/home/state" "$work/pool" "$work/cwd"
 pick="$repo/claude-accounts/bin/claude-accounts-pick"
 printf 'command=%s\nstate=%s\n' "$pick" "$work/pool" >"$work/account-pool"
-cat >"$work/pi" <<EOF
+# The controlled limit, as a real one looks to the pool: the first account a role's call lands on answers
+# claude-bridge's own limit text, and the pool's reading then shows that account spent until a future reset, as the
+# quota reader shows after a real limit. Every other call is real pi.
+cat >"$work/pi" <<'SHIM'
 #!/usr/bin/env bash
-# The controlled limit: the first account folder a role's call runs on answers claude-bridge's own limit text; every
-# other call is real pi.
-[ "\${1:-}" = list ] || [ -s "$work/limited" ] || printf '%s' "\${CLAUDE_CONFIG_DIR:-}" >"$work/limited"
-if [ "\${CLAUDE_CONFIG_DIR:-}" = "\$(cat "$work/limited" 2>/dev/null)" ] && [ "\${1:-}" != list ]; then
+[ "${1:-}" = list ] || [ -s "$LIMITED" ] || printf '%s' "${CLAUDE_CONFIG_DIR:-}" >"$LIMITED"
+if [ "${1:-}" != list ] && [ "${CLAUDE_CONFIG_DIR:-}" = "$(cat "$LIMITED")" ]; then
   cat >/dev/null
+  jq --arg f "$CLAUDE_CONFIG_DIR" --argjson now "$(date +%s)" --arg at "$(date -u -d '+3 hours' +%FT%TZ)" \
+    '.generated_at = $now | .accounts |= map(if .folder == $f then .five_hour = {left: 0, resets_at: $at} else . end)' \
+    "$READING" >"$READING.new" && mv "$READING.new" "$READING"
   printf '%s\n' '{"type":"message_end","stopReason":"error","errorMessage":"Claude rate limit (five_hour) resets in 3h: You are out of usage"}'
   exit 0
 fi
-exec "$real_pi" "\$@"
-EOF
+exec "$REAL_PI" "$@"
+SHIM
 chmod +x "$work/pi"
-export FM_HOME=$work/home PI_QUOTA_FAILOVER_REAL_PI=$work/pi PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool \
-  PI_QUOTA_FAILOVER_LOG=$evidence/wrapper.log PI_QUOTA_FAILOVER_PROBE=0 PI_QUOTA_FAILOVER_GATE=
+# The pool reads only its own state folder (no FM_HOME): a real reading taken once, refreshed for each role.
+FM_HOME=$work/home "$repo/claude-accounts/bin/claude-accounts-quota.sh" >/dev/null
+unset FM_HOME
+export REAL_PI=$real_pi LIMITED=$work/limited READING=$work/pool/claude-accounts.json PI_QUOTA_FAILOVER_REAL_PI=$work/pi \
+  PI_QUOTA_FAILOVER_ACCOUNT_POOL=$work/account-pool PI_QUOTA_FAILOVER_LOG=$evidence/wrapper.log PI_QUOTA_FAILOVER_PROBE=0 \
+  PI_QUOTA_FAILOVER_GATE=
 : >"$evidence/wrapper.log"
 fails=0 n=0
 for role in review test fix; do
   rm -rf "$work/pool/claude-accounts-rested" # each role starts with every account back, so each shows the move
   : >"$work/limited"
+  jq --argjson now "$(date +%s)" '.generated_at = $now | .accounts[].read_at = $now' "$work/home/state/claude-accounts.json" >"$READING"
   case $role in
     review) prompt='You are the review step of a code pipeline. Review this one-line change: "- x = 1\n+ x = 2". Reply with exactly one line that starts with REVIEW-OK.' ;;
     test) prompt='You are the test step of a code pipeline. The tests printed "3 passed". Reply with exactly one line that starts with TEST-OK.' ;;
@@ -45,7 +54,7 @@ for role in review test fix; do
     --model claude-bridge/claude-haiku-5-5 --mode json --no-session 2>>"$evidence/$role.stderr.txt")
   rc=$?
   set -e
-  answer=$(grep -o "${marker}[^\"\\\\]*" <<<"$out" | head -n 1)
+  answer=$(grep -o "${marker}[^\"\\\\]*" <<<"$out" | head -n 1) || true
   move=$(grep -o 'quota-error on account [^ ]* .*same route on account [^ ]*' "$evidence/wrapper.log" | tail -n 1 | sed 's/ in [0-9]*ms (.*);/;/')
   printf '%s: exit %s; %s; answer: %s\n' "$role" "$rc" "${move:-no account move}" "${answer:-none}" | tee -a "$evidence/roles.txt"
   n=$((n + 1))
