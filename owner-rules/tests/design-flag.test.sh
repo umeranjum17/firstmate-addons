@@ -44,6 +44,7 @@ check() {
     # shellcheck disable=SC1091 # the lib is in this checkout
     . "$addons/owner-rules/bin/fm-owner-rules-lib.sh"
     # the exit paths end the shell, so print the body from a trap
+    rc=0
     trap 'rc=$?; printf "err=%s\nbody=%s\nrc=%s\n" "$(cat "$work/err")" "$BRIEF_INCLUDE_BODY" "$rc"' EXIT
     fm_owner_rules_check "$home/data" "$1" direct-PR ship 2>"$work/err"
   )
