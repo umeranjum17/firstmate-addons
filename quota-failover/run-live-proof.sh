@@ -58,6 +58,13 @@ printf '{"rules":[{"when":"Lab work on the notes project.","use":[{"harness":"pi
 printf '#!/bin/sh\nprintf "export PI_CODING_AGENT_DIR=%%s\\n" %q >"$1"\n' "$work/pi-agent" >"$LAB/config/launch-env-hook" && chmod +x "$LAB/config/launch-env-hook"
 XDG_DATA_HOME=$ROOT/xdg "$repo/quota-failover/install.sh" "$LAB" >"$raw/install.txt"
 log "setup: this checkout's quota-failover watcher installed into the lab home ($(grep -c '^installed:' "$raw/install.txt") home)"
+inst=$ROOT/xdg/fm-quota-failover # the only pool library line the installed watcher sources is the add-on's own copy
+# shellcheck disable=SC2016 # matches the literal source line
+[ "$(grep -c 'fm-account-pool-lib\.sh' "$inst/quota-failover/quota-failover")" = 1 ] &&
+  grep -q '^\. "\$_FM_POOL_DIR/fm-account-pool-lib\.sh"' "$inst/quota-failover/quota-failover" &&
+  cmp -s "$inst/account-pool/bin/fm-account-pool-lib.sh" "$repo/account-pool/bin/fm-account-pool-lib.sh" ||
+  { log "FAIL: the installed watcher does not load the add-on's own account-pool library"; exit 1; }
+log "setup: the installed watcher sources only the add-on's own account-pool/bin/fm-account-pool-lib.sh (installed beside it, identical to this checkout's), not the Firstmate checkout's bin/ copy"
 
 lab_run "$LAB/bin/fm-brief.sh" "$ID" notes --mode local-only >/dev/null
 sed -i 's|{TASK}|Add count_notes(), which returns how many notes are stored, to notes/__init__.py.|; s|{FIRSTMATE_SPEC}|Implement count_notes(), commit, and report done. Nothing else is in scope.|' "$LAB/data/$ID/brief.md"
