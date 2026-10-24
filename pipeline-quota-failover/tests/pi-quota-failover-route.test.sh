@@ -54,10 +54,11 @@ done
 [ "$model" = "${STUB_SILENT:-}" ] && { sleep 600; exit 0; }
 [ "$1" = --help ] || printf '%s\n' "${CLAUDE_CONFIG_DIR:-default-login}" >>"$STUB_ACCOUNTS"
 printf '%s\n' '{"type":"session","id":"s-1"}'
-case " ${STUB_LIMITED:-} " in *" ${CLAUDE_CONFIG_DIR##*/} "*)
+# Only a named account folder listed in STUB_LIMITED answers the limit; a call with no account folder never does.
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ] && [[ " ${STUB_LIMITED:-} " = *" ${CLAUDE_CONFIG_DIR##*/} "* ]]; then
   printf '%s\n' '{"type":"message_end","stopReason":"error","errorMessage":"Claude rate limit (five_hour) resets in 3h: You are out of usage"}'
-  exit 0 ;;
-esac
+  exit 0
+fi
 printf '%s\n' "{\"type\":\"message_end\",\"role\":\"assistant\",\"model\":\"$model\",\"content\":\"PONG\"}"
 exit 0
 STUB
@@ -95,6 +96,8 @@ chmod +x "$stub/pool"
 mkdir -p "$work/pool/a" "$work/pool/b" "$work/poolstate"
 printf 'command=%s\nstate=%s\n' "$stub/pool" "$work/poolstate" >"$work/account-pool"
 
+# The runner has no login folder set; neither does this test, so a local run matches CI.
+unset CLAUDE_CONFIG_DIR
 export PI_QUOTA_FAILOVER_REAL_PI="$stub/pi" STUB_ACCOUNTS=$work/accounts STUB_POOL_LOG=$work/pool.log STUB_POOL_DIR=$work/pool
 export PI_QUOTA_FAILOVER_LOG="$log" STUB_ARGV=$work/argv STUB_QUOTA_LOG=$work/quota.log
 export HOME="$home" XDG_STATE_HOME="$work/state"
