@@ -215,7 +215,7 @@ done
 chrome-devtools-axi eval 'localStorage.setItem("fm-theme", "dark")' >/dev/null
 for w in 390 1280; do
   shot "tickets-dark-$w" "?dark-$w#/tickets" "$w" 'Your asks done'
-  shot "ticket-page-dark-$w" "?dark-page-$w#/tickets?ticket=main/m-ask" "$w" 'Serves your ask'
+  shot "ticket-page-dark-$w" "?dark-page-$w#/tickets?ticket=main/m-ask" "$w" 'Your words'
 done
 chrome-devtools-axi eval 'localStorage.removeItem("fm-theme")' >/dev/null
 # The app opens on Tickets, and the phone's pill nav has one button per view, each named; the current one shows its name.
@@ -244,7 +244,7 @@ for w in 390 1280; do shot "ticket-long-$w" "#/tickets?ticket=main/m-long" "$w" 
 grep -qF 'Receipt PASS · done-done pass · abc1234' "$DONE_DONE_EVIDENCE_ROOT/ticket-proof-390.txt" && grep -qF 'Main77' "$DONE_DONE_EVIDENCE_ROOT/ticket-long-390.txt" \
   || { echo "run-core-proof: the ticket page lacks the proof line or the ask's Main message" >&2; exit 1; }
 # The ticket page: the description without bookkeeping, the captain's words it serves, and the lane's status lines.
-for w in 390 1280; do shot "ticket-page-$w" '#/tickets?ticket=main/m-ask' "$w" 'Serves your ask'; done
+for w in 390 1280; do shot "ticket-page-$w" '#/tickets?ticket=main/m-ask' "$w" 'Your words'; done
 shot ticket-held-390 '#/tickets?ticket=main/m-held' 390 'Main decides: wait for the new layout.'
 # A comment needs the owner's sign-off board token, which the board's sign-off-<port> cookie carries: none, a wrong one
 # or a form post is refused, an unknown ticket too. With the board's cookie in the browser, as opening the board's link
@@ -293,7 +293,7 @@ jq -e '(.tickets[] | select(.task == "m-ask")) as $t | $t.ask == {"words": "Show
   and ([.tickets[] | select(.task == "m-held")][0] | .desc == "Main decides: wait for the new layout." and .ask.day == "22 Oct")' \
   "$home/state/dashboard/board.json" >/dev/null || { echo "run-core-proof: ticket page fields wrong: $(jq -c '.tickets[] | select(.task == "m-ask")' "$home/state/dashboard/board.json")" >&2; exit 1; }
 for w in 390 1280; do
-  for want in "Serves your ask of 22 Oct" "Two layouts are drawn" "Needs a decision" "Owner"; do
+  for want in "Your words · 22 Oct · Main42" "Two layouts are drawn" "Main decides" "Lead"; do
     grep -qF -- "$want" "$DONE_DONE_EVIDENCE_ROOT/ticket-page-$w.txt" || { echo "run-core-proof: ticket page at $w lacks '$want'" >&2; exit 1; }
   done
 done
